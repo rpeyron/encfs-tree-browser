@@ -13,12 +13,21 @@ let codecCache: Map<string, CodecConfig> = new Map();
 export async function initCodec(xmlContent: string, password: string): Promise<CodecConfig> {
   const config = parseEncfsConfig(xmlContent);
 
-  // Extract salt from the key's encoded part (first 16 bytes of the key content)
-  const keyContent = base64Decode(config.key);
-  const salt = keyContent.slice(0, 16);
+  // Handle both real EncFS format (with salt field) and simplified format
+  let salt: Uint8Array;
+  let iterations = config.kdfIterations || 16;
 
-  // Derive the key from password
-  const keyBits = await deriveKey(password, salt, config.keySize / 8, 16);
+  if (config.salt) {
+    // Real EncFS format: salt is base64-encoded
+    salt = base64Decode(config.salt);
+  } else {
+    // Simplified format: salt is embedded in config.key (first 16 bytes)
+    const keyContent = base64Decode(config.key);
+    salt = keyContent.slice(0, 16);
+  }
+
+  // Derive the key from password using the configured iterations
+  const keyBits = await deriveKey(password, salt, config.keySize / 8, iterations);
 
   return { config, password, keyBits };
 }

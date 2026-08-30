@@ -6,6 +6,8 @@ export interface EncFSConfig {
   nameAlg: 'Block' | 'Stream' | 'Null';
   iv: string;
   key: string;
+  salt: string;
+  kdfIterations: number;
 }
 
 // File tree node

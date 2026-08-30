@@ -1,11 +1,60 @@
 import type { EncFSConfig } from '../../types/index';
 
 export function parseEncfsConfig(xmlContent: string): EncFSConfig {
-  // Validate basic XML structure
-  if (!xmlContent.includes('<EncFS>') || !xmlContent.includes('</EncFS>')) {
-    throw new Error('Invalid XML format');
+  if (xmlContent.includes('boost_serialization')) {
+    return parseBoostSerializationFormat(xmlContent);
+  } else if (xmlContent.includes('EncFS')) {
+    return parseSimplifiedFormat(xmlContent);
+  }
+  throw new Error('Invalid XML format');
+}
+
+function parseBoostSerializationFormat(xmlContent: string): EncFSConfig {
+  const getTextContent = (tag: string): string => {
+    const regex = new RegExp(`<${tag}[^>]*>\\s*([\\s\\S]*?)\\s*</${tag}>`, 'i');
+    const match = xmlContent.match(regex);
+    return match ? match[1].trim() : '';
+  };
+
+  const getNestedTextContent = (parent: string, child: string): string => {
+    const regex = new RegExp(`<${parent}[^>]*>[\\s\\S]*?<${child}[^>]*>\\s*([\\s\\S]*?)\\s*</${child}>`, 'i');
+    const match = xmlContent.match(regex);
+    return match ? match[1].trim() : '';
+  };
+
+  const cipherAlg = getNestedTextContent('cipherAlg', 'name');
+  const nameAlg = getNestedTextContent('nameAlg', 'name');
+  const keySize = parseInt(getTextContent('keySize'), 10);
+  const blockSize = parseInt(getTextContent('blockSize'), 10);
+  const saltData = getTextContent('saltData');
+  const encodedKeyData = getTextContent('encodedKeyData');
+  const kdfIterations = parseInt(getTextContent('kdfIterations'), 10) || 16;
+
+  if (!cipherAlg || !keySize || !blockSize || !saltData || !encodedKeyData) {
+    throw new Error('Missing required EncFS config parameters');
   }
 
+  let algorithm = 'aes-256-cbc';
+  if (keySize === 256) algorithm = 'aes-256-cbc';
+  else if (keySize === 192) algorithm = 'aes-192-cbc';
+
+  let nameAlgorithm: 'Block' | 'Stream' | 'Null' = 'Block';
+  if (nameAlg.toLowerCase().includes('stream')) nameAlgorithm = 'Stream';
+  else if (nameAlg.toLowerCase().includes('null')) nameAlgorithm = 'Null';
+
+  return {
+    algorithm,
+    keySize,
+    blockSize,
+    nameAlg: nameAlgorithm,
+    iv: '',
+    key: encodedKeyData,
+    salt: saltData,
+    kdfIterations,
+  };
+}
+
+function parseSimplifiedFormat(xmlContent: string): EncFSConfig {
   const getTextContent = (tag: string): string => {
     const match = xmlContent.match(new RegExp(`<${tag}>([^<]+)</${tag}>`));
     return match ? match[1] : '';
@@ -36,5 +85,7 @@ export function parseEncfsConfig(xmlContent: string): EncFSConfig {
       : 'Block',
     iv,
     key,
+    salt: '',
+    kdfIterations: 16,
   };
 }
