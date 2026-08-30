@@ -1,0 +1,37 @@
+[
+  {
+    "password": "testpassword",
+    "salt": "AAAAAAAAAAAAAAAA",
+    "encoded": "kDGnCiZ4/8A=",
+    "decoded": "test.txt",
+    "description": "Simple filename with extension"
+  },
+  {
+    "password": "testpassword",
+    "salt": "AAAAAAAAAAAAAAAA",
+    "encoded": "mCDPGe9+QXo=",
+    "decoded": "document",
+    "description": "Simple filename without extension"
+  },
+  {
+    "password": "testpassword",
+    "salt": "AAAAAAAAAAAAAAAA",
+    "encoded": "UKLz0JfhsQ4=",
+    "decoded": "file.pdf",
+    "description": "Filename with different extension"
+  },
+  {
+    "password": "mypassword",
+    "salt": "BBBBBBBBBBBBBBBB",
+    "encoded": "6v2d0xb2sQo=",
+    "decoded": "secret",
+    "description": "Different password and salt"
+  },
+  {
+    "password": "testpassword",
+    "salt": "AAAAAAAAAAAAAAAA",
+    "encoded": "C2g8h8rJxKU=",
+    "decoded": "a",
+    "description": "Single character filename"
+  }
+]
