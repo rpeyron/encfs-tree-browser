@@ -95,7 +95,7 @@ npm run test:ui       # Open test UI
 - **Vite**: Fast build tool and dev server
 - **TanStack Table + Virtual**: Performant tree grid with virtualization
 - **Web Crypto API**: Native browser encryption (PBKDF2, AES)
-- **Tailwind CSS**: Utility-first styling
+- **Plain CSS**: Direct CSS styling for maintainability and reliability
 - **Vitest**: Unit testing with fixtures
 
 ## EncFS Support

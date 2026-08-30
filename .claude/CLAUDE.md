@@ -11,6 +11,7 @@ EncFS Tree Browser is a web application for displaying and navigating EncFS encr
 - Lazy loading of directory contents on-demand
 - Search, filter, and clipboard functionality
 - Configurable columns and view options
+- Professional modern UI with plain CSS styling
 
 ## Code Style & Conventions
 
@@ -21,16 +22,19 @@ EncFS Tree Browser is a web application for displaying and navigating EncFS encr
 - **Strict typing**: Use TypeScript strict mode, no `any` types
 - **Security first**: Validate at system boundaries (user input, File System API). Trust internal code.
 - **Minimal dependencies**: Use built-in APIs where possible (Web Crypto, File System Access API)
+- **Maintainable styling**: Use plain CSS classes instead of inline styles or utility frameworks
 
 ### File Structure
 ```
 src/
   ├── components/      # React UI components
   ├── lib/            # Core logic (encfs, tree-building, fs-scanning)
+  ├── styles/         # CSS stylesheets
   ├── types/          # Shared TypeScript types
   ├── hooks/          # Custom React hooks
   ├── App.tsx         # Main app component
-  └── main.tsx        # Entry point
+  ├── main.tsx        # Entry point
+  └── index.css       # Global CSS (Tailwind directives)
 
 tests/                # Test files (co-located with source)
   ├── fixtures/       # Test data and vectors
@@ -38,11 +42,12 @@ tests/                # Test files (co-located with source)
 ```
 
 ### Naming Conventions
-- **Files**: kebab-case (e.g., `name-codec.ts`, `tree-builder.ts`)
+- **Files**: kebab-case (e.g., `name-codec.ts`, `tree-builder.ts`, `app.css`)
 - **Components**: PascalCase (e.g., `TreeGrid.tsx`, `ConfigUploader.tsx`)
 - **Functions/types**: camelCase
 - **Constants**: UPPER_SNAKE_CASE for config constants only
 - **Types**: PascalCase with suffix (e.g., `TreeNode`, `ScanResult`, `CodecConfig`)
+- **CSS classes**: kebab-case (e.g., `app-container`, `setup-button`)
 
 ### React Components
 - Use functional components with hooks
@@ -50,6 +55,14 @@ tests/                # Test files (co-located with source)
 - Props should be typed with interfaces (never `any`)
 - Memoize expensive renders with `React.memo` when needed
 - Use descriptive prop names
+- Import CSS classes for styling (e.g., `import './styles/app.css'`)
+
+### CSS Organization
+- **Global styles**: `src/index.css` (base HTML, body, reset styles)
+- **Component styles**: `src/styles/app.css` (all UI component styling)
+- **CSS Variables**: Use CSS custom properties for colors and spacing (`--color-*` for semantic colors)
+- **Responsive**: Use media queries for mobile/tablet layouts
+- **Maintainability**: Group related styles by component/section with comments
 
 ### Testing Strategy
 - **Unit tests**: Core logic (encfs codec, tree builder, fs scanner)
@@ -59,11 +72,12 @@ tests/                # Test files (co-located with source)
 - Test fixtures in `tests/fixtures/`
 
 ### EncFS Implementation
-- Parse `.encfs6.xml` with DOMParser
+- Parse `.encfs6.xml` with regex-based parsing (Node.js compatible)
 - Support Block32 (primary), Stream, Null cipher modes
 - Use Web Crypto API (PBKDF2, AES)
 - Bidirectional: `decode(encoded) → decoded` and `encode(decoded) → encoded`
 - Graceful error handling: return null on decode failure, continue scan
+- Support both real EncFS format (boost_serialization) and simplified test format
 
 ### Performance Considerations
 - **Virtualisation**: TanStack Table + Virtual for rendering only visible rows (~50 rows)
@@ -98,14 +112,17 @@ npm run build    # Production build
 2. **TanStack Table**: Headless UI for maximum control, tree data support, virtualisation
 3. **Web Crypto API**: Native browser crypto, no external dependencies for AES/PBKDF2
 4. **React hooks**: Simpler state management than context/Redux for this app scope
-5. **localStorage**: Config persistence (columns, sort order, recent dirs)
+5. **Plain CSS**: Direct CSS styling over utility frameworks for maintainability and reliability
+   - **Why**: Tailwind v4 with @tailwindcss/postcss had compatibility issues with Vite (CSS not generating)
+   - **Benefit**: Plain CSS is portable, guaranteed to work, and easier to debug
+6. **localStorage**: Config persistence (columns, sort order, recent dirs)
 
 ## Key Files & Responsibilities
 
 **Core EncFS Logic:**
-- `src/lib/encfs/config-parser.ts` — Parse and validate .encfs6.xml
+- `src/lib/encfs/config-parser.ts` — Parse and validate .encfs6.xml (supports both boost_serialization and simplified formats)
 - `src/lib/encfs/name-codec.ts` — Encode/decode EncFS filenames (critical)
-- `src/lib/encfs/crypto.ts` — Web Crypto API wrapper (PBKDF2, AES)
+- `src/lib/encfs/crypto.ts` — Web Crypto API wrapper (PBKDF2, AES) with Node.js compatibility
 
 **Tree Building:**
 - `src/lib/tree-builder.ts` — Lazy tree construction, expand on-demand
@@ -113,8 +130,15 @@ npm run build    # Production build
 
 **UI Components:**
 - `src/components/TreeGrid.tsx` — Main tree-grid with TanStack Table (performance critical)
-- `src/components/ConfigUploader.tsx` — .encfs6.xml and password input
+- `src/components/ConfigUploader.tsx` — .encfs6.xml drag-and-drop upload
 - `src/components/DirectoryPicker.tsx` — File System Access API picker
+- `src/components/ModeSelector.tsx` — Encoded/decoded mode selection
+- `src/components/MountPointInput.tsx` — Mount point configuration
+- `src/components/SearchBar.tsx` — Real-time search input
+
+**Styling:**
+- `src/styles/app.css` — All application styling (colors, layout, components)
+- `src/index.css` — Global CSS and Tailwind directives
 
 **Testing:**
 - `tests/lib/encfs/name-codec.test.ts` — EncFS codec tests with fixtures (MUST PASS)
@@ -127,10 +151,13 @@ npm run build    # Production build
 3. **Large trees**: Must support 10,000+ items with smooth scrolling/expand
 4. **Mode detection**: Allow user to specify encoded/decoded, don't guess
 5. **Column redundancy**: Name (primary) + Alternate (secondary), no Type column (use icon)
+6. **Styling**: Plain CSS for maintainability; avoid complex utility frameworks
 
 ## Known Issues & Workarounds
 
-(None yet — will update as discovered)
+1. **Tailwind v4 compatibility**: Tailwind v4 with `@tailwindcss/postcss` did not work correctly with Vite
+   - **Solution**: Switched to plain CSS for guaranteed compatibility and easier debugging
+   - **Result**: All styling now in `src/styles/app.css` with CSS classes
 
 ## Future Enhancements
 
@@ -149,4 +176,4 @@ Priority order (from plan):
 ---
 
 **Last updated**: 2026-08-30  
-**Version**: 1.0 (Initial plan)
+**Version**: 1.1 (Switched to plain CSS, resolved Tailwind v4 compatibility issues)

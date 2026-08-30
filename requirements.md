@@ -124,9 +124,34 @@ EncFS Tree Browser is a web application for browsing and navigating EncFS-encryp
 4. Matching items highlighted
 5. User can copy matching path directly
 
-## Non-Functional Requirements
+## Implementation Notes
 
-### Performance
+### Styling & UI
+- **Framework**: Plain CSS (not Tailwind or utility frameworks)
+- **Location**: `src/styles/app.css` contains all component styling
+- **Approach**: CSS variables for semantic colors, standard CSS classes for layout and components
+- **Rationale**: Plain CSS provides guaranteed compatibility, easy debugging, and maintainability without framework overhead
+- All UI components styled consistently with professional modern design (gradients, proper spacing, hover effects)
+
+### EncFS Configuration Parsing
+- Supports both **real EncFS format** (boost_serialization XML) and simplified test format
+- Uses regex-based parsing for Node.js compatibility (no DOMParser)
+- Extracts salt, kdfIterations, cipherAlg, and other parameters from config
+- Handles multi-line XML with regex patterns like `[\s\S]*?`
+
+### Development
+- Dev server: Vite on port 5173
+- Styling: Plain CSS (compiled directly, no PostCSS complexity)
+- Build output includes CSS bundle (~11KB gzipped)
+
+## Known Implementation Details
+
+- **Build CSS size**: ~11KB gzipped (plain CSS bundle)
+- **Dev server**: Runs on port 5173 without CSS generation issues
+- **Config parsing**: Regex-based approach works in both Node.js (tests) and browser environments
+- **Real EncFS configs**: Successfully parsed from boost_serialization format with configurable PBKDF2 iterations
+
+
 - **Virtual Scrolling**: Only render visible rows (~50 at a time)
 - **Lazy Loading**: Initial load < 1s for level 1 (1000+ items)
 - **Search**: Debounce 300ms, return results instantly

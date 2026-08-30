@@ -24,15 +24,20 @@ export function DirectoryPicker({
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       <button
         onClick={handlePickDirectory}
         disabled={isLoading}
-        className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
+        className="px-4 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-lg font-medium shadow-sm hover:shadow-md hover:from-indigo-700 hover:to-blue-700 disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none disabled:cursor-not-allowed transition-all duration-200"
       >
         {isLoading ? 'Scanning...' : 'Select Directory'}
       </button>
-      {selectedPath && <p className="text-sm text-gray-600">Selected: {selectedPath}</p>}
+      {selectedPath && (
+        <div className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
+          <span className="text-lg">📁</span>
+          <span className="truncate">{selectedPath}</span>
+        </div>
+      )}
     </div>
   );
 }

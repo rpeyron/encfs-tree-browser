@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import './styles/app.css';
 import { ConfigUploader } from './components/ConfigUploader';
 import { DirectoryPicker } from './components/DirectoryPicker';
 import { ModeSelector } from './components/ModeSelector';
@@ -45,18 +46,13 @@ export function App() {
     setError('');
 
     try {
-      // Initialize codec
       const newCodec = await initCodec(configXml, password);
       setCodec(newCodec);
 
-      // Scan directory
       const entries = await scanDirectory(dirHandle, {
-        onProgress: () => {
-          // Could update progress here
-        },
+        onProgress: () => {},
       });
 
-      // Build tree
       const tree = await buildTreeLevel(entries, newCodec, mode);
       const withPaths = buildFullPaths(tree, '', '', '');
       const withMountPoint = applyMountPoint(withPaths, mountPoint);
@@ -70,7 +66,6 @@ export function App() {
   };
 
   const handleExpandNode = async (nodeId: string) => {
-    // TODO: Implement lazy loading of children on expand
     console.log('Expand node:', nodeId);
   };
 
@@ -81,99 +76,141 @@ export function App() {
   const isScanning = state === 'scanning';
 
   return (
-    <div className="h-screen bg-white flex flex-col">
-      <header className="bg-gray-50 border-b px-6 py-4">
-        <h1 className="text-2xl font-bold">EncFS Tree Browser</h1>
-        <p className="text-sm text-gray-600">View encrypted and decrypted filenames side-by-side</p>
+    <div className="app-container">
+      <header className="app-header">
+        <div className="app-header-title">
+          <h1>EncFS</h1>
+          <span>Tree Browser</span>
+        </div>
+        <p className="app-header-subtitle">Navigate encrypted directory trees with bidirectional filename mapping</p>
       </header>
 
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="app-main">
         {state === 'setup' && (
-          <div className="flex-1 overflow-auto p-6">
-            <div className="max-w-2xl space-y-6">
-              <section>
-                <h2 className="text-lg font-semibold mb-3">1. Upload EncFS Config</h2>
-                <ConfigUploader
-                  onConfigLoaded={handleConfigLoaded}
-                  onError={setError}
-                  isLoading={isScanning}
-                />
-                {configXml && <p className="text-sm text-green-600 mt-2">✓ Config loaded</p>}
-              </section>
+          <div className="app-setup">
+            <div className="app-setup-container">
+              <div className="app-setup-header">
+                <h2>Get Started</h2>
+                <p>Configure your EncFS environment in four simple steps</p>
+              </div>
 
-              <section>
-                <h2 className="text-lg font-semibold mb-3">2. Enter Password</h2>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="EncFS password"
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                  disabled={isScanning}
-                />
-              </section>
-
-              <section>
-                <h2 className="text-lg font-semibold mb-3">3. Select Directory</h2>
-                <DirectoryPicker
-                  onDirectorySelected={handleDirectorySelected}
-                  onError={setError}
-                  selectedPath={dirHandle?.name}
-                  isLoading={isScanning}
-                />
-              </section>
-
-              <section>
-                <h2 className="text-lg font-semibold mb-3">4. Configure</h2>
-                <div className="space-y-4">
-                  <ModeSelector
-                    mode={mode}
-                    onModeChange={setMode}
-                    disabled={isScanning}
-                  />
-                  <MountPointInput
-                    value={mountPoint}
-                    onChange={setMountPoint}
-                    disabled={isScanning}
-                  />
+              <div className="app-setup-steps">
+                <div className="setup-step">
+                  <div className="setup-step-number">1</div>
+                  <div className="setup-step-content">
+                    <h3 className="setup-step-title">Upload EncFS Config</h3>
+                    <ConfigUploader
+                      onConfigLoaded={handleConfigLoaded}
+                      onError={setError}
+                      isLoading={isScanning}
+                    />
+                    {configXml && (
+                      <div className="setup-success">
+                        <span className="setup-success-icon">✓</span>
+                        <span>Configuration loaded successfully</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </section>
 
-              {error && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded text-red-700">
-                  {error}
+                <div className="setup-step">
+                  <div className="setup-step-number">2</div>
+                  <div className="setup-step-content">
+                    <h3 className="setup-step-title">Enter Password</h3>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Your EncFS password"
+                      className="setup-password-input"
+                      disabled={isScanning}
+                    />
+                    <p>Your password is kept in memory only and never stored</p>
+                  </div>
                 </div>
-              )}
 
-              <button
-                onClick={handleScanClick}
-                disabled={!configXml || !password || !dirHandle || isScanning}
-                className="w-full px-6 py-3 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isScanning ? 'Scanning...' : 'Scan Directory'}
-              </button>
+                <div className="setup-step">
+                  <div className="setup-step-number">3</div>
+                  <div className="setup-step-content">
+                    <h3 className="setup-step-title">Select Directory</h3>
+                    <DirectoryPicker
+                      onDirectorySelected={handleDirectorySelected}
+                      onError={setError}
+                      selectedPath={dirHandle?.name}
+                      isLoading={isScanning}
+                    />
+                  </div>
+                </div>
+
+                <div className="setup-step">
+                  <div className="setup-step-number">4</div>
+                  <div className="setup-step-content">
+                    <h3 className="setup-step-title">Configure Options</h3>
+                    <div className="setup-options">
+                      <ModeSelector
+                        mode={mode}
+                        onModeChange={setMode}
+                        disabled={isScanning}
+                      />
+                      <MountPointInput
+                        value={mountPoint}
+                        onChange={setMountPoint}
+                        disabled={isScanning}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="setup-error">
+                    <span className="setup-error-icon">⚠</span>
+                    <div>
+                      <p className="setup-error-title">Error</p>
+                      <p className="setup-error-message">{error}</p>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleScanClick}
+                  disabled={!configXml || !password || !dirHandle || isScanning}
+                  className="setup-button"
+                >
+                  {isScanning ? (
+                    <span className="setup-button-content">
+                      <span className="setup-spinner"></span>
+                      Scanning directory...
+                    </span>
+                  ) : (
+                    'Scan Directory'
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
 
         {state === 'display' && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="border-b px-6 py-4 space-y-2">
-              <SearchBar value={search} onChange={setSearch} placeholder="Search files..." />
-              <div className="flex justify-between items-center text-sm text-gray-600">
-                <span>
-                  {filteredNodes.length} items
-                  {search && ` (filtered from ${nodes.length})`}
-                </span>
+          <div className="app-display">
+            <div className="display-header">
+              <div className="display-header-top">
+                <div className="display-header-title">
+                  <h2>File Tree</h2>
+                  <p>
+                    {filteredNodes.length} items
+                    {search && ` (filtered from ${nodes.length})`}
+                  </p>
+                </div>
                 <button
                   onClick={() => setState('setup')}
-                  className="px-3 py-1 text-blue-600 hover:bg-blue-50 rounded"
+                  className="display-back-button"
                 >
-                  Back to Setup
+                  ← Back to Setup
                 </button>
               </div>
+              <SearchBar value={search} onChange={setSearch} placeholder="Search files and directories..." />
             </div>
-            <div className="flex-1 overflow-hidden">
+            <div className="display-content">
               {codec && (
                 <TreeGrid
                   nodes={filteredNodes}

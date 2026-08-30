@@ -52,7 +52,7 @@ export function ConfigUploader({ onConfigLoaded, onError, isLoading }: ConfigUpl
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center transition-colors"
+      className="border-2 border-dashed border-indigo-300 rounded-lg p-8 text-center transition-all hover:border-indigo-500 hover:bg-indigo-50"
     >
       <input
         ref={fileInputRef}
@@ -65,11 +65,11 @@ export function ConfigUploader({ onConfigLoaded, onError, isLoading }: ConfigUpl
       <button
         onClick={() => fileInputRef.current?.click()}
         disabled={isLoading}
-        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+        className="px-4 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-lg font-medium shadow-sm hover:shadow-md hover:from-indigo-700 hover:to-blue-700 disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none disabled:cursor-not-allowed transition-all duration-200"
       >
         {isLoading ? 'Loading...' : 'Upload .encfs6.xml'}
       </button>
-      <p className="text-sm text-gray-600 mt-2">or drag and drop</p>
+      <p className="text-sm text-slate-600 mt-3">or drag and drop your config file here</p>
     </div>
   );
 }

@@ -16,7 +16,6 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
     "@tanstack/react-table": "^9.2.4",
     "@tanstack/react-virtual": "^3.14.10",
     "@tanstack/table-core": "^9.2.4",
@@ -27,10 +26,7 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
     "@vitest/ui": "^4.1.11",
-    "autoprefixer": "^10.5.4",
     "oxlint": "^1.79.0",
-    "postcss": "^8.5.26",
-    "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.2.2",
     "vitest": "^4.1.11"
