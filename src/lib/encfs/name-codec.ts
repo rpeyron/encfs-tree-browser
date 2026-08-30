@@ -1,5 +1,5 @@
-import type { EncFSConfig } from '../types/index';
-import { deriveKey, aesDecrypt, aesEncrypt, base64Decode, base64Encode } from './crypto';
+import type { EncFSConfig } from '../../types/index';
+import { deriveKey, aesDecrypt, aesEncrypt, base64Decode, base64Encode, encodeUtf8, decodeUtf8, getRandomBytes } from './crypto';
 import { parseEncfsConfig } from './config-parser';
 
 export interface CodecConfig {
@@ -55,7 +55,7 @@ export async function decodeFilename(
     }
 
     const plaintext = decrypted.slice(0, decrypted.length - paddingLength);
-    return new TextDecoder().decode(plaintext);
+    return decodeUtf8(plaintext);
   } catch (error) {
     return null;
   }
@@ -72,7 +72,7 @@ export async function encodeFilename(
       return decoded;
     }
 
-    const plaintext = new TextEncoder().encode(decoded);
+    const plaintext = encodeUtf8(decoded);
 
     // Add PKCS7 padding
     const blockSize = 16;
@@ -82,7 +82,7 @@ export async function encodeFilename(
     padded.fill(paddingLength, plaintext.length);
 
     // Generate random IV
-    const iv = crypto.getRandomValues(new Uint8Array(16));
+    const iv = getRandomBytes(16);
 
     // Encrypt
     const encrypted = await aesEncrypt(padded, keyBits, iv);

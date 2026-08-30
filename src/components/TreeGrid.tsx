@@ -1,161 +1,107 @@
-import React, { useMemo } from 'react';
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-  ExpandedState,
-} from '@tanstack/react-table';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useState } from 'react';
 import type { TreeNode } from '../types/index';
 import { useClipboard } from '../hooks/useClipboard';
-
-const columnHelper = createColumnHelper<TreeNode>();
 
 interface TreeGridProps {
   nodes: TreeNode[];
   mode: 'encoded' | 'decoded';
   onExpandNode?: (nodeId: string) => Promise<void>;
-  isLoading?: boolean;
 }
 
-export function TreeGrid({ nodes, mode, onExpandNode, isLoading }: TreeGridProps) {
-  const [expanded, setExpanded] = React.useState<ExpandedState>({});
-  const { copyToClipboard } = useClipboard();
-  const tableContainerRef = React.useRef<HTMLDivElement>(null);
+interface NodeState {
+  [key: string]: boolean;
+}
 
-  const columns = useMemo(
-    () => [
-      columnHelper.display({
-        id: 'expander',
-        header: '',
-        cell: ({ row }) =>
-          row.getCanExpand() ? (
-            <button
-              onClick={() => {
-                if (!row.getIsExpanded() && onExpandNode) {
-                  onExpandNode(row.original.id).catch(console.error);
-                }
-                row.toggleExpanded();
-              }}
-              className="w-6 h-6 flex items-center justify-center hover:bg-gray-200 rounded"
-            >
-              {row.getIsExpanded() ? '▼' : '▶'}
-            </button>
-          ) : (
-            <div className="w-6" />
-          ),
-        size: 40,
-      }),
-      columnHelper.accessor('nameDecoded', {
-        header: 'Name',
-        cell: ({ row }) => (
-          <div style={{ paddingLeft: `${row.depth * 20}px` }} className="flex items-center gap-2">
-            <span>{row.original.isDir ? '📁' : '📄'}</span>
-            <span>{mode === 'encoded' ? row.original.nameDecoded : row.original.nameEncoded}</span>
+export function TreeGrid({ nodes, mode, onExpandNode }: TreeGridProps) {
+  const [expanded, setExpanded] = useState<NodeState>({});
+  const { copyToClipboard } = useClipboard();
+
+  const toggleNode = async (nodeId: string) => {
+    setExpanded((prev) => ({
+      ...prev,
+      [nodeId]: !prev[nodeId],
+    }));
+    if (!expanded[nodeId] && onExpandNode) {
+      await onExpandNode(nodeId).catch(console.error);
+    }
+  };
+
+  const renderNode = (node: TreeNode, depth: number): React.ReactNode => {
+    const isExpanded = expanded[node.id];
+    const hasChildren = node.children && node.children.length > 0;
+
+    return (
+      <div key={node.id}>
+        <div className="flex items-center border-b hover:bg-gray-50">
+          <div style={{ paddingLeft: `${depth * 20}px` }} className="flex items-center gap-2 flex-1 py-2">
+            {hasChildren ? (
+              <button
+                onClick={() => toggleNode(node.id)}
+                className="w-6 h-6 flex items-center justify-center hover:bg-gray-200 rounded flex-shrink-0"
+              >
+                {isExpanded ? '▼' : '▶'}
+              </button>
+            ) : (
+              <div className="w-6 flex-shrink-0" />
+            )}
+            <span className="flex-shrink-0">{node.isDir ? '📁' : '📄'}</span>
+            <span className="truncate" title={node.path}>
+              {mode === 'encoded' ? node.nameDecoded : node.nameEncoded}
+            </span>
           </div>
-        ),
-      }),
-      columnHelper.accessor('nameEncoded', {
-        header: 'Alternate',
-        cell: ({ row }) =>
-          mode === 'encoded' ? row.original.nameEncoded : row.original.nameDecoded,
-      }),
-      columnHelper.accessor('size', {
-        header: 'Size',
-        cell: ({ getValue }) => formatSize(getValue()),
-      }),
-      columnHelper.accessor('mtime', {
-        header: 'Modified',
-        cell: ({ getValue }) => formatDate(getValue()),
-      }),
-      columnHelper.display({
-        id: 'actions',
-        header: 'Actions',
-        cell: ({ row }) => (
-          <div className="flex gap-1">
+
+          <div className="px-4 py-2 text-sm text-gray-600 min-w-fit">
+            {mode === 'encoded' ? node.nameEncoded : node.nameDecoded}
+          </div>
+
+          <div className="px-4 py-2 text-sm text-gray-500 min-w-20 text-right">
+            {formatSize(node.size)}
+          </div>
+
+          <div className="px-4 py-2 text-sm text-gray-500 min-w-32 text-right">
+            {formatDate(node.mtime)}
+          </div>
+
+          <div className="px-4 py-2">
             <button
-              onClick={() => copyToClipboard(row.original.path)}
+              onClick={() => copyToClipboard(node.path)}
               className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
-              title="Copy main path"
+              title="Copy path"
             >
               📋
             </button>
-            {mode === 'encoded' && (
-              <button
-                onClick={() => copyToClipboard(row.original.pathEncoded)}
-                className="px-2 py-1 text-xs bg-purple-500 text-white rounded hover:bg-purple-600"
-                title="Copy encoded path"
-              >
-                🔒
-              </button>
-            )}
           </div>
-        ),
-      }),
-    ],
-    [mode, onExpandNode]
-  );
+        </div>
 
-  const table = useReactTable({
-    data: nodes,
-    columns,
-    state: { expanded },
-    onExpandedChange: setExpanded,
-    getSubRows: (row) => row.children,
-    getCoreRowModel: getCoreRowModel(),
-  });
-
-  const rows = table.getRowModel().rows;
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => tableContainerRef.current,
-    estimateSize: () => 40,
-  });
-
-  const virtualRows = virtualizer.getVirtualItems();
+        {isExpanded && hasChildren && (
+          <div>
+            {node.children!.map((child) => renderNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
-    <div ref={tableContainerRef} className="h-full overflow-auto">
-      <table className="w-full border-collapse text-sm">
-        <thead className="bg-gray-100 sticky top-0 z-10">
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <th key={header.id} className="text-left px-2 py-2 border-b">
-                  {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {virtualRows.map((virtualRow) => {
-            const row = rows[virtualRow.index];
-            return (
-              <tr
-                key={row.id}
-                className="border-b hover:bg-gray-50"
-                style={{
-                  transform: `translateY(${virtualRow.start}px)`,
-                }}
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-2 py-2">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="h-full overflow-auto">
+      <div className="sticky top-0 z-10 bg-gray-100 border-b">
+        <div className="flex items-center">
+          <div className="flex-1 px-4 py-2 font-semibold">Name</div>
+          <div className="px-4 py-2 font-semibold min-w-fit">Alternate</div>
+          <div className="px-4 py-2 font-semibold min-w-20 text-right">Size</div>
+          <div className="px-4 py-2 font-semibold min-w-32 text-right">Modified</div>
+          <div className="px-4 py-2 font-semibold">Actions</div>
+        </div>
+      </div>
+      <div className="text-sm">
+        {nodes.map((node) => renderNode(node, 0))}
+      </div>
     </div>
   );
 }
 
 function formatSize(bytes: number): string {
-  if (bytes === 0) return '—';
+  if (bytes === 0) return '–';
   const units = ['B', 'KB', 'MB', 'GB'];
   let size = bytes;
   let unitIndex = 0;
@@ -167,7 +113,7 @@ function formatSize(bytes: number): string {
 }
 
 function formatDate(ms: number): string {
-  if (ms === 0) return '—';
+  if (ms === 0) return '–';
   const date = new Date(ms);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();

@@ -1,21 +1,27 @@
-import type { EncFSConfig } from '../types/index';
+import type { EncFSConfig } from '../../types/index';
 
 export function parseEncfsConfig(xmlContent: string): EncFSConfig {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xmlContent, 'application/xml');
-
-  if (doc.documentElement.nodeName === 'parsererror') {
+  // Validate basic XML structure
+  if (!xmlContent.includes('<EncFS>') || !xmlContent.includes('</EncFS>')) {
     throw new Error('Invalid XML format');
   }
 
-  const root = doc.documentElement;
+  const getTextContent = (tag: string): string => {
+    const match = xmlContent.match(new RegExp(`<${tag}>([^<]+)</${tag}>`));
+    return match ? match[1] : '';
+  };
 
-  const algorithm = root.querySelector('algorithm')?.getAttribute('name') || '';
-  const keySize = parseInt(root.querySelector('keySize')?.textContent || '0', 10);
-  const blockSize = parseInt(root.querySelector('blockSize')?.textContent || '0', 10);
-  const nameAlgorithm = root.querySelector('nameAlgorithm')?.getAttribute('name') || '';
-  const iv = root.querySelector('iv')?.textContent || '';
-  const key = root.querySelector('key')?.getAttribute('content') || '';
+  const getAttribute = (tag: string, attr: string): string => {
+    const match = xmlContent.match(new RegExp(`<${tag}[^>]*${attr}="([^"]*)"[^>]*>`));
+    return match ? match[1] : '';
+  };
+
+  const algorithm = getAttribute('algorithm', 'name');
+  const keySize = parseInt(getTextContent('keySize'), 10);
+  const blockSize = parseInt(getTextContent('blockSize'), 10);
+  const nameAlgorithm = getAttribute('nameAlgorithm', 'name');
+  const iv = getTextContent('iv');
+  const key = getAttribute('key', 'content');
 
   if (!algorithm || !keySize || !blockSize) {
     throw new Error('Missing required EncFS config parameters');

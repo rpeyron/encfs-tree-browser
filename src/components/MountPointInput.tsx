@@ -1,5 +1,3 @@
-import React from 'react';
-
 interface MountPointInputProps {
   value: string;
   onChange: (value: string) => void;

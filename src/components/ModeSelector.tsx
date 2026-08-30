@@ -1,5 +1,3 @@
-import React from 'react';
-
 interface ModeInputProps {
   mode: 'encoded' | 'decoded';
   onModeChange: (mode: 'encoded' | 'decoded') => void;

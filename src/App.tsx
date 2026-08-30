@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ConfigUploader } from './components/ConfigUploader';
 import { DirectoryPicker } from './components/DirectoryPicker';
 import { ModeSelector } from './components/ModeSelector';
@@ -18,8 +18,6 @@ export function App() {
   const [error, setError] = useState<string>('');
   const [nodes, setNodes] = useState<TreeNode[]>([]);
   const [search, setSearch] = useState('');
-
-  // Config state
   const [configXml, setConfigXml] = useState('');
   const [password, setPassword] = useState('');
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
@@ -53,7 +51,7 @@ export function App() {
 
       // Scan directory
       const entries = await scanDirectory(dirHandle, {
-        onProgress: (count) => {
+        onProgress: () => {
           // Could update progress here
         },
       });
@@ -80,6 +78,8 @@ export function App() {
     ? filterNodes(nodes, search, mode)
     : nodes;
 
+  const isScanning = state === 'scanning';
+
   return (
     <div className="h-screen bg-white flex flex-col">
       <header className="bg-gray-50 border-b px-6 py-4">
@@ -96,7 +96,7 @@ export function App() {
                 <ConfigUploader
                   onConfigLoaded={handleConfigLoaded}
                   onError={setError}
-                  isLoading={state === 'scanning'}
+                  isLoading={isScanning}
                 />
                 {configXml && <p className="text-sm text-green-600 mt-2">✓ Config loaded</p>}
               </section>
@@ -109,7 +109,7 @@ export function App() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="EncFS password"
                   className="w-full px-3 py-2 border border-gray-300 rounded"
-                  disabled={state === 'scanning'}
+                  disabled={isScanning}
                 />
               </section>
 
@@ -119,7 +119,7 @@ export function App() {
                   onDirectorySelected={handleDirectorySelected}
                   onError={setError}
                   selectedPath={dirHandle?.name}
-                  isLoading={state === 'scanning'}
+                  isLoading={isScanning}
                 />
               </section>
 
@@ -129,12 +129,12 @@ export function App() {
                   <ModeSelector
                     mode={mode}
                     onModeChange={setMode}
-                    disabled={state === 'scanning'}
+                    disabled={isScanning}
                   />
                   <MountPointInput
                     value={mountPoint}
                     onChange={setMountPoint}
-                    disabled={state === 'scanning'}
+                    disabled={isScanning}
                   />
                 </div>
               </section>
@@ -147,10 +147,10 @@ export function App() {
 
               <button
                 onClick={handleScanClick}
-                disabled={!configXml || !password || !dirHandle || state === 'scanning'}
+                disabled={!configXml || !password || !dirHandle || isScanning}
                 className="w-full px-6 py-3 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {state === 'scanning' ? 'Scanning...' : 'Scan Directory'}
+                {isScanning ? 'Scanning...' : 'Scan Directory'}
               </button>
             </div>
           </div>
@@ -191,8 +191,27 @@ export function App() {
 
 function filterNodes(nodes: TreeNode[], search: string, mode: 'encoded' | 'decoded'): TreeNode[] {
   const lowerSearch = search.toLowerCase();
-  return nodes.filter((node) => {
+
+  const matches = (node: TreeNode): boolean => {
     const nameToSearch = mode === 'encoded' ? node.nameDecoded : node.nameEncoded;
-    return nameToSearch.toLowerCase().includes(lowerSearch);
-  });
+    const nameMatches = nameToSearch.toLowerCase().includes(lowerSearch);
+    const childMatches = node.children?.some(matches);
+    return nameMatches || !!childMatches;
+  };
+
+  const filter = (node: TreeNode): TreeNode | null => {
+    const nameToSearch = mode === 'encoded' ? node.nameDecoded : node.nameEncoded;
+    const nameMatches = nameToSearch.toLowerCase().includes(lowerSearch);
+
+    const filteredChildren = node.children?.map(n => filter(n)).filter(Boolean) as TreeNode[] | undefined;
+    const hasMatchingChildren = (filteredChildren?.length ?? 0) > 0;
+
+    if (nameMatches || hasMatchingChildren) {
+      return { ...node, children: filteredChildren };
+    }
+
+    return null;
+  };
+
+  return nodes.map(n => filter(n)).filter(Boolean) as TreeNode[];
 }

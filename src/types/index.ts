@@ -34,10 +34,3 @@ export interface ScanResult {
   errors: Array<{ path: string; error: string }>;
 }
 
-// Codec config
-export interface CodecConfig {
-  password: string;
-  salt: string;
-  keySize: number;
-  iterations: number;
-}

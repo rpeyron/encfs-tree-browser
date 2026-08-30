@@ -1,5 +1,3 @@
-import React, { useState } from 'react';
-
 interface DirectoryPickerProps {
   onDirectorySelected: (handle: FileSystemDirectoryHandle) => void;
   onError: (error: string) => void;
@@ -15,7 +13,7 @@ export function DirectoryPicker({
 }: DirectoryPickerProps) {
   const handlePickDirectory = async () => {
     try {
-      const dirHandle = await window.showDirectoryPicker();
+      const dirHandle = await (window as any).showDirectoryPicker();
       onDirectorySelected(dirHandle);
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
