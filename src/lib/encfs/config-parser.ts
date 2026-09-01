@@ -26,6 +26,7 @@ function parseBoostSerializationFormat(xmlContent: string): EncFSConfig {
   const nameAlg = getNestedTextContent('nameAlg', 'name');
   const keySize = parseInt(getTextContent('keySize'), 10);
   const blockSize = parseInt(getTextContent('blockSize'), 10);
+  const ivLength = parseInt(getTextContent('ivLength'), 10) || 16;
   const saltData = getTextContent('saltData');
   const encodedKeyData = getTextContent('encodedKeyData');
   const kdfIterations = parseInt(getTextContent('kdfIterations'), 10) || 16;
@@ -50,7 +51,9 @@ function parseBoostSerializationFormat(xmlContent: string): EncFSConfig {
     iv: '',
     key: encodedKeyData,
     salt: saltData,
+    ivLength,
     kdfIterations,
+    encodedKeyData,
   };
 }
 
@@ -84,6 +87,7 @@ function parseSimplifiedFormat(xmlContent: string): EncFSConfig {
       ? nameAlgorithm
       : 'Block',
     iv,
+    ivLength: 16,
     key,
     salt: '',
     kdfIterations: 16,

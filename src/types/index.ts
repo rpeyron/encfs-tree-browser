@@ -5,9 +5,13 @@ export interface EncFSConfig {
   blockSize: number;
   nameAlg: 'Block' | 'Stream' | 'Null';
   iv: string;
+  ivLength: number;
+
   key: string;
   salt: string;
   kdfIterations: number;
+  /** Serialized volume key (boost_serialization `.encfs6.xml`); base64. */
+  encodedKeyData?: string;
 }
 
 // File tree node

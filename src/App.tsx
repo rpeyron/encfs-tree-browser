@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import './styles/app.css';
 import { ConfigUploader } from './components/ConfigUploader';
 import { DirectoryPicker } from './components/DirectoryPicker';
@@ -6,25 +6,68 @@ import { ModeSelector } from './components/ModeSelector';
 import { MountPointInput } from './components/MountPointInput';
 import { SearchBar } from './components/SearchBar';
 import { TreeGrid } from './components/TreeGrid';
-import { initCodec } from './lib/encfs/name-codec';
+import { initCodec, decodeFilename, encodeFilename } from './lib/encfs/name-codec';
 import { scanDirectory } from './lib/fs-scanner';
-import { buildTreeLevel, buildFullPaths, applyMountPoint } from './lib/tree-builder';
+import { buildTreeLevel, buildFullPaths, applyMountPoint, findNodeById } from './lib/tree-builder';
 import type { TreeNode } from './types/index';
+import { saveDirHandle, loadDirHandle } from './lib/persist-dir';
 import type { CodecConfig } from './lib/encfs/name-codec';
+
 
 type AppState = 'setup' | 'scanning' | 'display';
 
+interface PersistedConfig {
+  configXml?: string;
+  mode: 'encoded' | 'decoded';
+  mountPoint: string;
+  dirName?: string;
+}
+
+const STORAGE_KEY = 'encfs-tree-config';
+
+function loadPersisted(): PersistedConfig | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
 export function App() {
+  const persisted = loadPersisted();
+
   const [state, setState] = useState<AppState>('setup');
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState('');
   const [nodes, setNodes] = useState<TreeNode[]>([]);
   const [search, setSearch] = useState('');
-  const [configXml, setConfigXml] = useState('');
+  const [configXml, setConfigXml] = useState(persisted?.configXml && persisted.configXml !== '' ? persisted.configXml : '');
   const [password, setPassword] = useState('');
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
-  const [mode, setMode] = useState<'encoded' | 'decoded'>('encoded');
-  const [mountPoint, setMountPoint] = useState('/');
+  const [dirName, setDirName] = useState(persisted?.dirName ?? '');
+  const [mode, setMode] = useState<'encoded' | 'decoded'>(persisted?.mode ?? 'encoded');
+  const [mountPoint, setMountPoint] = useState(persisted?.mountPoint ?? '/');
   const [codec, setCodec] = useState<CodecConfig | null>(null);
+
+  // Path converter
+  const [convertPath, setConvertPath] = useState('');
+  const [converted, setConverted] = useState('');
+
+  // Expand/collapse state (lifted from TreeGrid)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState<Record<string, boolean>>({});
+
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+
+  // Restore previously saved directory handle (IndexedDB) on startup
+  useEffect(() => {
+    loadDirHandle().then(handle => {
+      if (handle) {
+        setDirHandle(handle);
+        setDirName(handle.name);
+      }
+    });
+  }, []);
 
   const handleConfigLoaded = (content: string) => {
     setConfigXml(content);
@@ -33,6 +76,8 @@ export function App() {
 
   const handleDirectorySelected = (handle: FileSystemDirectoryHandle) => {
     setDirHandle(handle);
+    setDirName(handle.name);
+    saveDirHandle(handle);
     setError('');
   };
 
@@ -41,23 +86,16 @@ export function App() {
       setError('Please provide config, password, and directory');
       return;
     }
-
     setState('scanning');
     setError('');
-
     try {
       const newCodec = await initCodec(configXml, password);
       setCodec(newCodec);
-
-      const entries = await scanDirectory(dirHandle, {
-        onProgress: () => {},
-      });
-
+      const entries = await scanDirectory(dirHandle, { onProgress: () => {} });
       const tree = await buildTreeLevel(entries, newCodec, mode);
       const withPaths = buildFullPaths(tree, '', '', '');
-      const withMountPoint = applyMountPoint(withPaths, mountPoint);
-
-      setNodes(withMountPoint);
+      const withMount = applyMountPoint(withPaths, mountPoint);
+      setNodes(withMount);
       setState('display');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan directory');
@@ -66,14 +104,126 @@ export function App() {
   };
 
   const handleExpandNode = async (nodeId: string) => {
-    console.log('Expand node:', nodeId);
+    if (!dirHandle || !codec) return;
+    try {
+      const parts = nodeId.split('/').filter(p => p);
+      let handle: FileSystemDirectoryHandle = dirHandle;
+      for (const part of parts) {
+        handle = await handle.getDirectoryHandle(part);
+      }
+      const entries = await scanDirectory(handle);
+      const childrenTree = await buildTreeLevel(entries, codec, mode, nodeId);
+      const parentNode = findNodeById(nodesRef.current, nodeId);
+      const basePath = parentNode?.path || '';
+      const baseDecoded = parentNode?.pathDecoded || parentNode?.path || '';
+      const baseEncoded = parentNode?.pathEncoded || parentNode?.path || '';
+      const withPaths = buildFullPaths(childrenTree, basePath, baseDecoded, baseEncoded);
+      const withMount = applyMountPoint(withPaths, mountPoint);
+      setNodes(prev => {
+        const insert = (arr: TreeNode[]): TreeNode[] =>
+          arr.map(n => {
+            if (n.id === nodeId) return { ...n, children: withMount };
+            if (n.children) return { ...n, children: insert(n.children) };
+            return n;
+          });
+        return insert(prev);
+      });
+    } catch (e) {
+      console.error('Failed to expand node', e);
+    }
   };
 
-  const filteredNodes = search
-    ? filterNodes(nodes, search, mode)
-    : nodes;
+  // Ensure a directory's children are loaded, loading them from disk if needed
+  const ensureLoaded = async (nodeId: string): Promise<TreeNode | null> => {
+    const node = findNodeById(nodesRef.current, nodeId);
+    if (!node || !node.isDir) return node;
+    if (node.children && node.children.length > 0) return node;
+    return new Promise(resolve => {
+      setLoading(prev => ({ ...prev, [nodeId]: true }));
+      handleExpandNode(nodeId).finally(() => {
+        setLoading(prev => ({ ...prev, [nodeId]: false }));
+        const updated = findNodeById(nodesRef.current, nodeId);
+        resolve(updated);
+      });
+    });
+  };
+
+  // Expand helpers — populate directory content on expansion
+  const expandOneLevel = async () => {
+    if (!codec) return;
+    const dirs = nodesRef.current.filter(n => n.isDir);
+    const next: Record<string, boolean> = {};
+    dirs.forEach(n => { next[n.id] = true; });
+    setExpanded(prev => ({ ...prev, ...next }));
+    for (const n of dirs) await ensureLoaded(n.id);
+  };
+
+  const expandAll = async () => {
+    if (!codec) return;
+    const collectDirs = (list: TreeNode[]): TreeNode[] =>
+      list.flatMap(n => n.isDir ? [n, ...(n.children ? collectDirs(n.children) : [])] : []);
+    const all = collectDirs(nodesRef.current);
+    const next: Record<string, boolean> = {};
+    all.forEach(n => { next[n.id] = true; });
+    setExpanded(prev => ({ ...prev, ...next }));
+    for (const n of all) await ensureLoaded(n.id);
+  };
+
+  const collapseAll = () => setExpanded({});
+
+  // Path converter — converts every segment of a full path
+  const convertSegment = async (seg: string, direction: 'decode' | 'encode') =>
+    direction === 'decode'
+      ? await decodeFilename(seg, codec!)
+      : await encodeFilename(seg, codec!);
+
+  const handleConvert = async (direction: 'decode' | 'encode') => {
+    if (!convertPath.trim()) return;
+    if (!codec) {
+      setConverted('Scan a directory first');
+      return;
+    }
+    try {
+      const input = convertPath.trim();
+      const leadSlash = input.startsWith('/');
+      const segments = input.split('/').filter(Boolean);
+      const converted = [];
+      for (const seg of segments) {
+        const out = await convertSegment(seg, direction);
+        if (!out) throw new Error('segment failed');
+        converted.push(out);
+      }
+      setConverted((leadSlash ? '/' : '') + converted.join('/') || 'Conversion failed');
+    } catch {
+      setConverted('Conversion error');
+    }
+  };
+
+  const filteredNodes = search ? filterNodes(nodes, search, mode) : nodes;
+
+  const onToggleNode = (id: string) => {
+    const willExpand = !expanded[id];
+    if (willExpand) {
+      const node = nodesRef.current && findNodeById(nodesRef.current, id);
+      const alreadyLoaded = node && node.children && node.children.length > 0;
+      if (node && node.isDir && !alreadyLoaded) {
+        setLoading(prev => ({ ...prev, [id]: true }));
+        handleExpandNode(id).finally(() => {
+          setLoading(prev => ({ ...prev, [id]: false }));
+        });
+      }
+      setExpanded(prev => ({ ...prev, [id]: true }));
+    } else {
+      setExpanded(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+  };
 
   const isScanning = state === 'scanning';
+  const hasSaved = persisted != null;
 
   return (
     <div className="app-container">
@@ -82,7 +232,23 @@ export function App() {
           <h1>EncFS</h1>
           <span>Tree Browser</span>
         </div>
-        <p className="app-header-subtitle">Navigate encrypted directory trees with bidirectional filename mapping</p>
+        {state === 'display' && (
+          <div className="app-header-actions">
+            <p className="app-header-stats">
+              {filteredNodes.length} items{search ? ` (${nodes.length} total)` : ''}
+            </p>
+            <SearchBar value={search} onChange={setSearch} placeholder="Search..." />
+            <div className="header-btn-group">
+              <button onClick={() => void expandOneLevel()} className="header-btn" title="Expand first level, loading contents">▶ 1Lvl</button>
+              <button onClick={() => void expandAll()} className="header-btn" title="Expand all, loading contents">⊞ All</button>
+              <button onClick={collapseAll} className="header-btn" title="Collapse all">⊟ All</button>
+            </div>
+            <button onClick={() => { setState('setup'); setExpanded({}); }} className="header-btn back-btn">Config</button>
+          </div>
+        )}
+        {state === 'setup' && (
+          <p className="app-header-subtitle">Navigate encrypted directory trees with bidirectional filename mapping</p>
+        )}
       </header>
 
       <main className="app-main">
@@ -91,76 +257,54 @@ export function App() {
             <div className="app-setup-container">
               <div className="app-setup-header">
                 <h2>Get Started</h2>
-                <p>Configure your EncFS environment in four simple steps</p>
+                <p>Configure your EncFS environment in three simple steps</p>
               </div>
+
+              {hasSaved && (
+                <div className="setup-saved">
+                  <span className="setup-saved-icon">💾</span>
+                  <div>
+                    <p className="setup-saved-title">Saved settings restored</p>
+                    <p className="setup-saved-detail">
+                      {dirName ? `Directory: ${dirName}` : 'No directory saved'} · Mode: {mode} · Mount point: {mountPoint || '/'}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div className="app-setup-steps">
                 <div className="setup-step">
                   <div className="setup-step-number">1</div>
                   <div className="setup-step-content">
                     <h3 className="setup-step-title">Upload EncFS Config</h3>
-                    <ConfigUploader
-                      onConfigLoaded={handleConfigLoaded}
-                      onError={setError}
-                      isLoading={isScanning}
-                    />
+                    <ConfigUploader onConfigLoaded={handleConfigLoaded} onError={setError} isLoading={isScanning} />
                     {configXml && (
                       <div className="setup-success">
                         <span className="setup-success-icon">✓</span>
-                        <span>Configuration loaded successfully</span>
+                        <span>Configuration loaded</span>
                       </div>
                     )}
                   </div>
                 </div>
-
                 <div className="setup-step">
                   <div className="setup-step-number">2</div>
                   <div className="setup-step-content">
                     <h3 className="setup-step-title">Enter Password</h3>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Your EncFS password"
-                      className="setup-password-input"
-                      disabled={isScanning}
-                    />
-                    <p>Your password is kept in memory only and never stored</p>
+                    <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Your EncFS password" className="setup-password-input" disabled={isScanning} />
+                    <p>Password stays in memory only, never stored</p>
                   </div>
                 </div>
-
                 <div className="setup-step">
                   <div className="setup-step-number">3</div>
                   <div className="setup-step-content">
-                    <h3 className="setup-step-title">Select Directory</h3>
-                    <DirectoryPicker
-                      onDirectorySelected={handleDirectorySelected}
-                      onError={setError}
-                      selectedPath={dirHandle?.name}
-                      isLoading={isScanning}
-                    />
-                  </div>
-                </div>
-
-                <div className="setup-step">
-                  <div className="setup-step-number">4</div>
-                  <div className="setup-step-content">
-                    <h3 className="setup-step-title">Configure Options</h3>
+                    <h3 className="setup-step-title">Select Directory & Configure</h3>
+                    <DirectoryPicker onDirectorySelected={handleDirectorySelected} onError={setError} selectedPath={dirHandle?.name || dirName} isLoading={isScanning} />
                     <div className="setup-options">
-                      <ModeSelector
-                        mode={mode}
-                        onModeChange={setMode}
-                        disabled={isScanning}
-                      />
-                      <MountPointInput
-                        value={mountPoint}
-                        onChange={setMountPoint}
-                        disabled={isScanning}
-                      />
+                      <ModeSelector mode={mode} onModeChange={setMode} disabled={isScanning} />
+                      <MountPointInput value={mountPoint} onChange={setMountPoint} disabled={isScanning} />
                     </div>
                   </div>
                 </div>
-
                 {error && (
                   <div className="setup-error">
                     <span className="setup-error-icon">⚠</span>
@@ -170,20 +314,10 @@ export function App() {
                     </div>
                   </div>
                 )}
-
-                <button
-                  onClick={handleScanClick}
-                  disabled={!configXml || !password || !dirHandle || isScanning}
-                  className="setup-button"
-                >
+                <button onClick={handleScanClick} disabled={!configXml || !password || !dirHandle || isScanning} className="setup-button">
                   {isScanning ? (
-                    <span className="setup-button-content">
-                      <span className="setup-spinner"></span>
-                      Scanning directory...
-                    </span>
-                  ) : (
-                    'Scan Directory'
-                  )}
+                    <span className="setup-button-content"><span className="setup-spinner"></span>Scanning...</span>
+                  ) : 'Scan Directory'}
                 </button>
               </div>
             </div>
@@ -192,32 +326,43 @@ export function App() {
 
         {state === 'display' && (
           <div className="app-display">
-            <div className="display-header">
-              <div className="display-header-top">
-                <div className="display-header-title">
-                  <h2>File Tree</h2>
-                  <p>
-                    {filteredNodes.length} items
-                    {search && ` (filtered from ${nodes.length})`}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setState('setup')}
-                  className="display-back-button"
-                >
-                  ← Back to Setup
-                </button>
+            <div className="convert-bar">
+              <div className="convert-row">
+                <span className="convert-label">Convert path:</span>
+                <input
+                  type="text"
+                  value={convertPath}
+                  onChange={e => { setConvertPath(e.target.value); setConverted(''); }}
+                  onKeyDown={e => { if (e.key === 'Enter') handleConvert('decode'); }}
+                  placeholder="Full path, each segment converted"
+                  className="convert-input"
+                />
+                <button onClick={() => handleConvert('decode')} className="convert-btn">Decode</button>
+                <button onClick={() => handleConvert('encode')} className="convert-btn">Encode</button>
               </div>
-              <SearchBar value={search} onChange={setSearch} placeholder="Search files and directories..." />
+              {converted && (
+                <div className="convert-output">
+                  <div className="convert-result">
+                    <span className="convert-result-text">{converted}</span>
+                    <button
+                      className="convert-result-copy"
+                      title="Copy result"
+                      onClick={() => navigator.clipboard.writeText(converted)}
+                    >
+                      📋
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="display-content">
-              {codec && (
-                <TreeGrid
-                  nodes={filteredNodes}
-                  mode={mode}
-                  onExpandNode={handleExpandNode}
-                />
-              )}
+              <TreeGrid
+                nodes={filteredNodes}
+                mode={mode}
+                expanded={expanded}
+                loading={loading}
+                onToggleNode={onToggleNode}
+              />
             </div>
           </div>
         )}
@@ -227,28 +372,14 @@ export function App() {
 }
 
 function filterNodes(nodes: TreeNode[], search: string, mode: 'encoded' | 'decoded'): TreeNode[] {
-  const lowerSearch = search.toLowerCase();
-
-  const matches = (node: TreeNode): boolean => {
-    const nameToSearch = mode === 'encoded' ? node.nameDecoded : node.nameEncoded;
-    const nameMatches = nameToSearch.toLowerCase().includes(lowerSearch);
-    const childMatches = node.children?.some(matches);
-    return nameMatches || !!childMatches;
-  };
-
+  const q = search.toLowerCase();
   const filter = (node: TreeNode): TreeNode | null => {
-    const nameToSearch = mode === 'encoded' ? node.nameDecoded : node.nameEncoded;
-    const nameMatches = nameToSearch.toLowerCase().includes(lowerSearch);
-
-    const filteredChildren = node.children?.map(n => filter(n)).filter(Boolean) as TreeNode[] | undefined;
-    const hasMatchingChildren = (filteredChildren?.length ?? 0) > 0;
-
-    if (nameMatches || hasMatchingChildren) {
-      return { ...node, children: filteredChildren };
-    }
-
+    const name = mode === 'encoded' ? node.nameDecoded : node.nameEncoded;
+    const match = name.toLowerCase().includes(q);
+    const kids = node.children?.map(filter).filter(Boolean) as TreeNode[] | undefined;
+    const kidMatch = (kids?.length ?? 0) > 0;
+    if (match || kidMatch) return { ...node, children: kids };
     return null;
   };
-
-  return nodes.map(n => filter(n)).filter(Boolean) as TreeNode[];
+  return nodes.map(filter).filter(Boolean) as TreeNode[];
 }

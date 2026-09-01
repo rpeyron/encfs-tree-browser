@@ -9,6 +9,11 @@ export async function buildTreeLevel(
   mode: 'encoded' | 'decoded',
   parentPath: string = ''
 ): Promise<TreeNode[]> {
+  // codec should always be provided after initCodec.
+  if (!codec) {
+    console.error('Codec not initialized');
+    return [];
+  }
   const nodes: TreeNode[] = [];
 
   for (const entry of entries) {
@@ -65,7 +70,8 @@ export function buildFullPaths(
   return nodes.map((node) => {
     const pathDecoded =
       parentPathDecoded + (parentPathDecoded ? '/' : '') + node.nameDecoded;
-    const pathEncoded = parentPathEncoded + (parentPathEncoded ? '/' : '') + node.nameEncoded;
+    const pathEncoded =
+      parentPathEncoded + (parentPathEncoded ? '/' : '') + node.nameEncoded;
 
     return {
       ...node,

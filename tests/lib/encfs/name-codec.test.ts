@@ -1,6 +1,71 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { initCodec, decodeFilename, encodeFilename } from '../../../src/lib/encfs/name-codec';
 
+const REAL_ENC_FS_CONFIG = `<?xml version="1.0"?>
+<!DOCTYPE boost_serialization>
+<boost_serialization signature="serialization::archive" version="10">
+<cfg class_id="0" tracking_level="0" version="20">
+	<version>20100713</version>
+	<creator>EncFS 1.9.5</creator>
+	<cipherAlg>
+		<name>ssl/aes</name>
+		<major>3</major>
+		<minor>0</minor>
+	</cipherAlg>
+	<nameAlg>
+		<name>nameio/block</name>
+		<major>3</major>
+		<minor>0</minor>
+	</nameAlg>
+	<keySize>32</keySize>
+	<blockSize>1024</blockSize>
+	<ivLength>16</ivLength>
+	<kdfIterations>329317</kdfIterations>
+	<desiredKDFDuration>500</desiredKDFDuration>
+	<encodedKeySize>32</encodedKeySize>
+	<encodedKeyData>WQKQqzAYh0goP0+jzGGUPZpuHNLPSZg6MHfHVW/BSYw=</encodedKeyData>
+	<saltLen>20</saltLen>
+	<saltData>HSMJFYOPWpj/BHGhl7S6nVPYyXU=</saltData>
+</cfg>
+</boost_serialization>`;
+
+describe('Real EncFS (boost_serialization) Name Codec', () => {
+  let realCodec: Awaited<ReturnType<typeof initCodec>>;
+
+  beforeAll(async () => {
+    realCodec = await initCodec(REAL_ENC_FS_CONFIG, 'testpassword');
+  });
+
+  it('should parse real EncFS config with salt', () => {
+    expect(realCodec.config.salt).toBe('HSMJFYOPWpj/BHGhl7S6nVPYyXU=');
+    expect(realCodec.config.nameAlg).toBe('Block');
+    expect(realCodec.config.keySize).toBe(32);
+  });
+
+  it('should encode to filename-safe chars (no "/" "+" "=")', async () => {
+    const encoded = await encodeFilename('test-file.txt', realCodec);
+    expect(encoded).not.toBeNull();
+    expect(encoded).not.toMatch(/[+/=]/);
+    expect(encoded).not.toContain('/');
+  });
+
+  it('should round-trip encode/decode real EncFS', async () => {
+    const original = 'my-document.pdf';
+    const encoded = await encodeFilename(original, realCodec);
+    expect(encoded).not.toBeNull();
+    const decoded = await decodeFilename(encoded!, realCodec);
+    expect(decoded).toBe(original);
+  });
+
+  it('should round-trip unicode filenames', async () => {
+    const original = '报告 2026.txt';
+    const encoded = await encodeFilename(original, realCodec);
+    expect(encoded).not.toBeNull();
+    const decoded = await decodeFilename(encoded!, realCodec);
+    expect(decoded).toBe(original);
+  });
+});
+
 const SAMPLE_CONFIG = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <EncFS>
   <algorithm name="aes-256-cbc"/>
