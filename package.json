@@ -12,15 +12,11 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "encfs-filename-codec": "file:../encfs-names-ts",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@tanstack/react-table": "^9.2.4",
-    "@tanstack/react-virtual": "^3.14.10",
-    "@tanstack/table-core": "^9.2.4",
-    "@testing-library/jest-dom": "^7.0.1",
-    "@testing-library/react": "^16.3.3",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

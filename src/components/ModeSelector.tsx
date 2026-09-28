@@ -4,6 +4,7 @@ interface ModeInputProps {
   disabled?: boolean;
 }
 
+
 export function ModeSelector({ mode, onModeChange, disabled }: ModeInputProps) {
   const options: Array<{ value: 'encoded' | 'decoded'; title: string; desc: string; icon: string }> = [
     { value: 'encoded', title: 'Encoded', desc: 'Encrypted names', icon: '🔒' },

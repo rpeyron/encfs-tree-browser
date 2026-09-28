@@ -6,10 +6,12 @@ A web application for viewing and navigating EncFS-encrypted directory trees wit
 
 - **View encrypted directories**: Load an EncFS volume and see decoded filenames alongside their encrypted counterparts
 - **Bidirectional mapping**: Switch between viewing encrypted and decoded names as the primary display
-- **Large tree support**: Virtualized tree grid for smooth performance with thousands of files
+- **Large tree support**: lazy loading keeps browsing responsive on big volumes
 - **Lazy loading**: On-demand expansion of directories for minimal initial load time
 - **Search & filter**: Real-time search across filenames
 - **Clipboard operations**: Copy full paths (encoded or decoded) to clipboard with one click
+- **Path converter**: Convert an arbitrary path (encoded ↔ decoded) with a copy button on the result
+- **Config persistence**: Restores config, mode, mount point, and directory across reloads
 - **Mount point configuration**: Specify where a directory portion connects in the broader EncFS tree
 
 ## Requirements
@@ -26,6 +28,9 @@ A web application for viewing and navigating EncFS-encrypted directory trees wit
 ```bash
 npm install
 ```
+
+`npm install` also links the local `file:../encfs-names-ts` dependency and builds it
+(see [How the npm package is used](#how-the-npm-package-is-used)).
 
 ### Development
 
@@ -69,42 +74,97 @@ npm run test:ui       # Open test UI
 
 ### Core Components
 
-- **EncFS Codec** (`src/lib/encfs/`)
-  - Config parser for `.encfs6.xml` validation
-  - Name codec with bidirectional encode/decode
-  - Web Crypto API wrapper for AES encryption
+- **EncFS name crypto**: provided entirely by the
+  [`encfs-filename-codec`](../encfs-names-ts) npm package (see
+  [How the npm package is used](#how-the-npm-package-is-used))
+  - `.encfs6.xml` parsing, volume key derivation, Block/Stream name encode/decode are
+    all in the package (MAC-verified, golden-vector tested)
 
 - **File System** (`src/lib/fs-scanner.ts`)
   - File System Access API integration for directory scanning
-  - Recursive directory traversal with lazy loading
+  - One level of entries per call; deeper levels are loaded on demand
 
 - **Tree Building** (`src/lib/tree-builder.ts`)
   - Hierarchical tree construction from flat file listings
+  - Computes the chained name IV of a parent directory and converts each child name
+    with the package's `encryptName` / `decryptName` (a failed conversion keeps the
+    raw name instead of failing the scan)
   - Mount point offset handling
-  - Bidirectional name path mapping
+  - Bidirectional name path mapping (full decoded and encoded paths per node)
+
+- **Persistence** (`src/lib/persist-dir.ts`)
+  - Stores the selected `FileSystemDirectoryHandle` in IndexedDB and re‑requests
+    permission on load, avoiding re‑selection after restart
 
 - **UI Components** (`src/components/`)
-  - TreeGrid: Virtual table display using TanStack Table
+  - TreeGrid: recursive tree rows, expand-on-demand (1 level / all / collapse)
   - ConfigUploader: File upload for .encfs6.xml
   - DirectoryPicker: File System Access API directory selection
   - SearchBar, ModeSelector, MountPointInput: Configuration UI
+
+### How the npm package is used
+
+All EncFS filename crypto lives in the local package `encfs-names-ts`, published to this
+workspace as **`encfs-filename-codec`**. The app has no crypto code of its own.
+
+**Dependency** (`package.json`):
+
+```json
+"dependencies": {
+  "encfs-filename-codec": "file:../encfs-names-ts"
+}
+```
+
+`file:` creates a junction/symlink from `node_modules/encfs-filename-codec` to
+`../encfs-names-ts`. npm runs the package's `prepare` script once at install time,
+which runs `tsc` and emits `dist/` — that `dist/` is what the app imports
+(`exports` points at `./dist/src/index.js` + `.d.ts`).
+
+**Import points in the app:**
+
+| Where | Call | Purpose |
+|-------|------|---------|
+| `src/App.tsx` | `EncfsNameCodec.fromV6Xml(xml, password)` | Parse `.encfs6.xml`, derive the volume key from the password, build the codec |
+| `src/lib/tree-builder.ts` | `codec.decryptName(component, parentIv)` | Encoded → decoded name of one path component |
+| `src/lib/tree-builder.ts` | `codec.encryptName(component, parentIv)` | Decoded → encoded name of one path component |
+| `src/lib/tree-builder.ts` | `codec.chainedNameIv` | Whether children's names chain their parent's IV |
+
+The codec instance is stored in React state (`useState<EncfsNameCodec | null>`); the
+password is only ever passed to `fromV6Xml` and never persisted.
+
+**Rebuilding after editing the package:** npm does not watch `../encfs-names-ts`.
+After changing it, rebuild it once, then restart the dev server / rerun tests:
+
+```bash
+cd ../encfs-names-ts && npm run build   # emits dist/
+cd ../encfs-tree-browser && npm run dev
+```
+
+If you change only the package's own code, `npm install` in this app is unnecessary —
+the link already points at the source tree.
 
 ### Key Technologies
 
 - **React + TypeScript**: Type-safe UI components
 - **Vite**: Fast build tool and dev server
-- **TanStack Table + Virtual**: Performant tree grid with virtualization
-- **Web Crypto API**: Native browser encryption (PBKDF2, AES)
+- **encfs-filename-codec**: EncFS filename crypto (Web Crypto API: PBKDF2, AES, HMAC‑SHA1)
 - **Plain CSS**: Direct CSS styling for maintainability and reliability
 - **Vitest**: Unit testing with fixtures
 
 ## EncFS Support
 
-### Supported Algorithms
+Filename crypto is delegated to [`encfs-filename-codec`](../encfs-names-ts); this app
+only calls it. Supported there:
 
-- **Block cipher** (Block32): Most common EncFS configuration
-- **Stream cipher**: Alternative name encoding
-- **Null cipher**: No encryption (pass-through)
+- **Block cipher** (nameio/block): Most common EncFS configuration
+- **Stream cipher** (nameio/stream): Alternative name encoding
+- **Key derivation**: EncFS `BytesToKey` (SHA‑1, 16 rounds) from the volume password,
+  then AES‑CFB decryption of the encoded volume key from `encodedKeyData` (V6 config;
+  Argon2id/V7 and cipher interface < 3 are not supported)
+- **Filename encoding**: EncFS custom base64 (alphabet `,-0-9A-Za-z`) — characters are
+  filename‑safe (no `/`, `+`, `=`)
+- **Chained name IV**: parent-directory IV chain walked component by component
+- **Path conversion**: Full‑path decode/encode with a copy button on the result
 
 ### Limitations
 
@@ -114,14 +174,15 @@ npm run test:ui       # Open test UI
 
 ## Testing
 
-The project includes comprehensive tests for core EncFS functionality:
+Tests cover this app's wiring of the codec and its tree building; the crypto algorithms
+themselves are tested in [`encfs-names-ts`](../encfs-names-ts) (`npm test` there):
 
 ```bash
 # Run all tests
 npm run test
 
 # Run specific test file
-npm run test -- name-codec.test.ts
+npm run test -- tree-builder.test.ts
 
 # Watch mode
 npm run test -- --watch
@@ -132,11 +193,13 @@ npm run test:ui
 
 ### Test Coverage
 
-- EncFS codec: encode/decode round-trips, unicode support, error handling
-- Config parser: valid/invalid XML, parameter extraction
-- Crypto utilities: PBKDF2 key derivation, AES encryption
-- File system scanner: directory traversal
-- Tree builder: path construction, mount point handling
+- Package wiring: `fromV6Xml` password rejection, encode/decode round-trips (ascii,
+  unicode, chained full paths) against real EncFS 1.9.5 fixture vectors
+- Tree builder: per-directory IV chaining in both modes, fallback to the raw name when
+  a name cannot be converted
+
+Crypto algorithm tests live in [`encfs-names-ts`](../encfs-names-ts) (`npm test` there),
+with real encrypted trees and Rust golden vectors.
 
 ## Code Style
 
@@ -144,7 +207,7 @@ npm run test:ui
 - Minimal comments (only for non-obvious WHY)
 - Compact, readable implementations
 - Security-first input validation
-- Web Crypto API for all encryption
+- No crypto code in the app — all of it comes from `encfs-filename-codec`
 
 ## Browser Compatibility
 
@@ -181,14 +244,15 @@ encfs-tree-browser/
 ├── src/
 │   ├── components/      # React UI components
 │   ├── lib/            # Core logic
-│   │   ├── encfs/      # EncFS codec
 │   │   ├── fs-scanner.ts
+│   │   ├── persist-dir.ts
 │   │   └── tree-builder.ts
+│   ├── styles/         # app.css (plain CSS)
 │   ├── types/          # TypeScript types
 │   ├── hooks/          # React hooks
 │   └── App.tsx         # Main app
 ├── tests/              # Test files
-│   ├── fixtures/       # Test data
+│   ├── fixtures/       # Real EncFS 1.9.5 vector configs
 │   └── lib/
 └── .claude/            # Agent rules and documentation
 ```
@@ -204,7 +268,7 @@ When adding new features:
 
 ## Future Enhancements
 
-- [ ] Config persistence (localStorage)
+- [x] Config persistence (localStorage + IndexedDB for the directory handle)
 - [ ] Drag & drop file upload
 - [ ] Auto-detect encoded/decoded mode
 - [ ] Export tree to CSV/JSON
@@ -225,7 +289,8 @@ When adding new features:
 ## Contributing
 
 To contribute improvements:
-1. Check the plan in `d:\Dev\encfs-tree-browser\.claude\CLAUDE.md`
+1. Check `AGENTS.md` (constraints) and `docs/requirements-technical.md` (architecture/style)
+
 2. Run tests: `npm run test`
 3. Build: `npm run build`
 4. Test in browser before committing
@@ -239,4 +304,3 @@ This project was created as an educational tool for EncFS exploration.
 - [EncFS Documentation](https://vgough.github.io/encfs/)
 - [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API)
 - [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)
-- [TanStack Table](https://tanstack.com/table/)

@@ -1,19 +1,3 @@
-// EncFS configuration types
-export interface EncFSConfig {
-  algorithm: string;
-  keySize: number;
-  blockSize: number;
-  nameAlg: 'Block' | 'Stream' | 'Null';
-  iv: string;
-  ivLength: number;
-
-  key: string;
-  salt: string;
-  kdfIterations: number;
-  /** Serialized volume key (boost_serialization `.encfs6.xml`); base64. */
-  encodedKeyData?: string;
-}
-
 // File tree node
 export interface TreeNode {
   id: string;
@@ -28,15 +12,4 @@ export interface TreeNode {
   isDir: boolean;
   children?: TreeNode[];
   isLoaded?: boolean;
-  error?: string;
 }
-
-// Scan result
-export interface ScanResult {
-  nodes: TreeNode[];
-  totalFiles: number;
-  totalDirs: number;
-  totalSize: number;
-  errors: Array<{ path: string; error: string }>;
-}
-

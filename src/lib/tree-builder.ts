@@ -1,20 +1,38 @@
+import type { EncfsNameCodec } from 'encfs-filename-codec';
 import type { TreeNode } from '../types/index';
-import type { CodecConfig } from './encfs/name-codec';
-import { decodeFilename, encodeFilename } from './encfs/name-codec';
 import type { FSEntry } from './fs-scanner';
+
+const utf8 = new TextDecoder('utf-8', { fatal: true });
+
+/**
+ * IV that the names of a directory's children are chained with.
+ * Walks the directory's own path from the root; returns 0 when the volume
+ * does not chain name IVs (or the directory is the root).
+ */
+async function parentDirIv(
+  codec: EncfsNameCodec,
+  path: string,
+  mode: 'encoded' | 'decoded',
+): Promise<bigint> {
+  if (!codec.chainedNameIv) return 0n;
+  let iv = 0n;
+  for (const component of path.split('/').filter(Boolean)) {
+    iv =
+      mode === 'encoded'
+        ? (await codec.decryptName(component, iv)).nextIv
+        : (await codec.encryptName(component, iv)).nextIv;
+  }
+  return iv;
+}
 
 export async function buildTreeLevel(
   entries: FSEntry[],
-  codec: CodecConfig,
+  codec: EncfsNameCodec,
   mode: 'encoded' | 'decoded',
-  parentPath: string = ''
+  parentPath: string = '',
 ): Promise<TreeNode[]> {
-  // codec should always be provided after initCodec.
-  if (!codec) {
-    console.error('Codec not initialized');
-    return [];
-  }
   const nodes: TreeNode[] = [];
+  const dirIv = parentPath ? await parentDirIv(codec, parentPath, mode) : 0n;
 
   for (const entry of entries) {
     const id = `${parentPath}/${entry.name}`;
@@ -23,21 +41,14 @@ export async function buildTreeLevel(
     let nameDecoded = entry.name;
     let nameEncoded = entry.name;
 
-    if (mode === 'encoded') {
-      // Input is encoded, decode to get readable name
-      const decoded = await decodeFilename(entry.name, codec);
-      if (decoded) {
-        nameDecoded = decoded;
+    try {
+      if (mode === 'encoded') {
+        nameDecoded = utf8.decode((await codec.decryptName(entry.name, dirIv)).plaintext);
       } else {
-        // Mark decode error but continue
-        console.warn(`Failed to decode: ${entry.name}`);
+        nameEncoded = (await codec.encryptName(entry.name, dirIv)).encodedName;
       }
-    } else {
-      // Input is decoded, encode to get encrypted name
-      const encoded = await encodeFilename(entry.name, codec);
-      if (encoded) {
-        nameEncoded = encoded;
-      }
+    } catch {
+      // A single bad name must not fail the scan: keep the raw name.
     }
 
     const node: TreeNode = {

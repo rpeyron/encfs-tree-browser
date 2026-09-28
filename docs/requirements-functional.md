@@ -1,8 +1,10 @@
-# EncFS Tree Browser - Functional Requirements
+# EncFS Tree Browser — Functional Requirements
 
 ## Overview
 
 EncFS Tree Browser is a web application for browsing and navigating EncFS-encrypted directory trees. It enables users to view both encoded (encrypted) and decoded (plaintext) filenames simultaneously, making it easy to understand the encryption mapping and navigate encrypted directories.
+
+Technical constraints, architecture and code style live in [requirements-technical.md](requirements-technical.md).
 
 ## Core Features
 
@@ -28,6 +30,9 @@ EncFS Tree Browser is a web application for browsing and navigating EncFS-encryp
   - If directory is encoded: show decoded names, with encoded variant visible
   - If directory is decoded: show encoded names, with decoded variant visible
   - Mapping togglable per row
+- **Directory Persistence**: The selected directory handle is stored in IndexedDB (`encfs-db`,
+  object store `handles`, key `dir`) and re-requested on next load, so the user does not
+  have to re-select the directory when restarting the app.
 
 ### 3. Columns & Display
 **Primary columns:**
@@ -43,7 +48,8 @@ EncFS Tree Browser is a web application for browsing and navigating EncFS-encryp
 - Show/hide columns via dropdown menu
 - Reorder columns by dragging header
 - Resize columns by dragging column border
-- Configuration persists in localStorage
+- Configuration persists in localStorage (config XML, mode, mount point, directory name);
+  the directory handle itself persists in IndexedDB
 
 ### 4. Navigation & Interaction
 - **Expand/Collapse**:
@@ -65,21 +71,41 @@ EncFS Tree Browser is a web application for browsing and navigating EncFS-encryp
 - **Copy Path Buttons**: Each row has 2 buttons:
   - Copy main path (encoded or decoded based on mode)
   - Copy alternate path (the other representation)
-- **Full Path**: Include complete path from root to current node (applying mount point)
+- **Full Path**: Include complete path from root to current node (all parent directories plus
+  the filename) — the encoded button copies the full encoded path and the decoded button copies
+  the full decoded path
 - **Feedback**: Visual confirmation (✓ toast) when copied
 - **Keyboard Support**: Ctrl+C on selected row copies main path
 
+### 5b. Path Converter
+- **Convert path input**: A field in the display toolbar accepts a full path; the app converts
+  every segment (decode or encode) and shows the result
+- **Result display**: The converted path appears on its own line directly below the input row
+  (inside `.convert-bar`), alongside a clipboard button (📋) to copy it
+- **Enter** triggers decode; a **Decode** and an **Encode** button trigger the respective
+  direction
+
 ### 6. EncFS Name Encoding/Decoding
 - **Supported Algorithms**:
-  - Block cipher (Block32 - primary)
-  - Stream cipher
-  - Null cipher (no encryption)
+  - Block cipher (nameio/block - primary)
+  - Stream cipher (nameio/stream)
+  - Null cipher (no encryption) — **not implemented** in `encfs-filename-codec`
+- **Key derivation**: EncFS `BytesToKey` (SHA‑1, 16 rounds) from the volume password,
+  yielding key + IV material; the volume key is then decrypted from `encodedKeyData`
+  with AES‑CFB (IV = the 4‑byte checksum prefix)
+- **Name cipher (Block)**: PKCS7‑style padding to the AES block size, a 2‑byte MAC‑16
+  prefix (fold of HMAC‑SHA1 MAC‑64), then AES‑CBC with a per‑name IV derived from the
+  MAC via HMAC‑SHA1 over the volume's IV data
+- **Name cipher (Stream)**: double‑pass AES‑CBC with shuffle/flip byte permutation
 - **Bidirectional**: Both encode and decode operations
-- **Error Handling**: Single decode failure doesn't fail entire scan; mark item with warning
+- **Filename encoding**: EncFS custom base64 (alphabet `,-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz`)
+  via `changeBase2` (8‑bit→6‑bit bit‑stream), producing filename‑safe characters
+  (no `/`, `+`, `=`)
+- **Error Handling**: Single decode failure doesn't fail entire scan; a failed
+  conversion keeps the raw (un‑converted) name on that row so the scan continues
 - **Support for**:
   - Various key sizes (128, 192, 256-bit AES)
   - UTF-8 filenames
-  - Long filenames (handled via block chaining)
   - Special characters
 
 ### 7. View Options & Preferences
@@ -124,78 +150,3 @@ EncFS Tree Browser is a web application for browsing and navigating EncFS-encryp
 4. Matching items highlighted
 5. User can copy matching path directly
 
-## Implementation Notes
-
-### Styling & UI
-- **Framework**: Plain CSS (not Tailwind or utility frameworks)
-- **Location**: `src/styles/app.css` contains all component styling
-- **Approach**: CSS variables for semantic colors, standard CSS classes for layout and components
-- **Rationale**: Plain CSS provides guaranteed compatibility, easy debugging, and maintainability without framework overhead
-- All UI components styled consistently with professional modern design (gradients, proper spacing, hover effects)
-
-### EncFS Configuration Parsing
-- Supports both **real EncFS format** (boost_serialization XML) and simplified test format
-- Uses regex-based parsing for Node.js compatibility (no DOMParser)
-- Extracts salt, kdfIterations, cipherAlg, and other parameters from config
-- Handles multi-line XML with regex patterns like `[\s\S]*?`
-
-### Development
-- Dev server: Vite on port 5173
-- Styling: Plain CSS (compiled directly, no PostCSS complexity)
-- Build output includes CSS bundle (~11KB gzipped)
-
-## Known Implementation Details
-
-- **Build CSS size**: ~11KB gzipped (plain CSS bundle)
-- **Dev server**: Runs on port 5173 without CSS generation issues
-- **Config parsing**: Regex-based approach works in both Node.js (tests) and browser environments
-- **Real EncFS configs**: Successfully parsed from boost_serialization format with configurable PBKDF2 iterations
-
-
-- **Virtual Scrolling**: Only render visible rows (~50 at a time)
-- **Lazy Loading**: Initial load < 1s for level 1 (1000+ items)
-- **Search**: Debounce 300ms, return results instantly
-- **Large Trees**: Support 10,000+ nodes smoothly
-- **Memory**: Cache decoded names, reuse computation
-
-### Browser Support
-- **Primary**: Chrome 90+, Edge 90+ (File System Access API)
-- **Fallback**: None (requires File System Access API)
-- **Note**: Safari and Firefox not supported
-
-### Security
-- **Password**: Kept in memory only, never logged or persisted
-- **Crypto**: Use Web Crypto API (native browser crypto)
-- **Input Validation**: Validate config and user input at boundaries
-- **File Access**: Only through File System Access API (user-authorized)
-
-### Accessibility
-- Semantic HTML (table structure for tree)
-- Keyboard navigation fully supported
-- ARIA labels for interactive elements
-- Color contrast sufficient for readability
-- Icons have text alternatives
-
-### Code Quality
-- TypeScript strict mode
-- No `any` types
-- Test coverage for crypto logic and tree building
-- Unit tests for core algorithms
-- Component tests for UI interactions
-
-## Out of Scope (Phase 2+)
-
-- Batch file operations (delete, move, etc.)
-- Compare view (side-by-side encoded/decoded)
-- Export to CSV/JSON
-- Advanced filtering (by size, date range, file type)
-- Settings persistence in cloud
-- Command-line interface
-- Server-side mounting
-- Real-time sync with live EncFS mount
-
----
-
-**Created**: 2026-08-30  
-**Status**: Initial specification  
-**Version**: 1.0

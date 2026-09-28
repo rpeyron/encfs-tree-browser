@@ -6,12 +6,11 @@ import { ModeSelector } from './components/ModeSelector';
 import { MountPointInput } from './components/MountPointInput';
 import { SearchBar } from './components/SearchBar';
 import { TreeGrid } from './components/TreeGrid';
-import { initCodec, decodeFilename, encodeFilename } from './lib/encfs/name-codec';
+import { EncfsNameCodec } from 'encfs-filename-codec';
 import { scanDirectory } from './lib/fs-scanner';
 import { buildTreeLevel, buildFullPaths, applyMountPoint, findNodeById } from './lib/tree-builder';
 import type { TreeNode } from './types/index';
 import { saveDirHandle, loadDirHandle } from './lib/persist-dir';
-import type { CodecConfig } from './lib/encfs/name-codec';
 
 
 type AppState = 'setup' | 'scanning' | 'display';
@@ -46,7 +45,7 @@ export function App() {
   const [dirName, setDirName] = useState(persisted?.dirName ?? '');
   const [mode, setMode] = useState<'encoded' | 'decoded'>(persisted?.mode ?? 'encoded');
   const [mountPoint, setMountPoint] = useState(persisted?.mountPoint ?? '/');
-  const [codec, setCodec] = useState<CodecConfig | null>(null);
+  const [codec, setCodec] = useState<EncfsNameCodec | null>(null);
 
   // Path converter
   const [convertPath, setConvertPath] = useState('');
@@ -57,7 +56,9 @@ export function App() {
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 
   const nodesRef = useRef(nodes);
-  nodesRef.current = nodes;
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
 
   // Restore previously saved directory handle (IndexedDB) on startup
   useEffect(() => {
@@ -89,9 +90,9 @@ export function App() {
     setState('scanning');
     setError('');
     try {
-      const newCodec = await initCodec(configXml, password);
+      const newCodec = await EncfsNameCodec.fromV6Xml(configXml, password);
       setCodec(newCodec);
-      const entries = await scanDirectory(dirHandle, { onProgress: () => {} });
+      const entries = await scanDirectory(dirHandle);
       const tree = await buildTreeLevel(entries, newCodec, mode);
       const withPaths = buildFullPaths(tree, '', '', '');
       const withMount = applyMountPoint(withPaths, mountPoint);
@@ -171,12 +172,7 @@ export function App() {
 
   const collapseAll = () => setExpanded({});
 
-  // Path converter — converts every segment of a full path
-  const convertSegment = async (seg: string, direction: 'decode' | 'encode') =>
-    direction === 'decode'
-      ? await decodeFilename(seg, codec!)
-      : await encodeFilename(seg, codec!);
-
+  // Path converter — whole path, IV chained per component by the codec
   const handleConvert = async (direction: 'decode' | 'encode') => {
     if (!convertPath.trim()) return;
     if (!codec) {
@@ -186,14 +182,9 @@ export function App() {
     try {
       const input = convertPath.trim();
       const leadSlash = input.startsWith('/');
-      const segments = input.split('/').filter(Boolean);
-      const converted = [];
-      for (const seg of segments) {
-        const out = await convertSegment(seg, direction);
-        if (!out) throw new Error('segment failed');
-        converted.push(out);
-      }
-      setConverted((leadSlash ? '/' : '') + converted.join('/') || 'Conversion failed');
+      const result =
+        direction === 'decode' ? await codec.decodePath(input) : await codec.encodePath(input);
+      setConverted(result ? (leadSlash ? '/' : '') + result : 'Conversion failed');
     } catch {
       setConverted('Conversion error');
     }

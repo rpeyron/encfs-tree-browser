@@ -6,7 +6,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebSearch",
-      "PowerShell(npm run test)"
+      "PowerShell(npm run test)",
+      "PowerShell(Get-ChildItem -Path \"tests/encfs-tests\" -Recurse | Select-Object FullName, PSIsContainer | ForEach-Object { if \\($_.PSIsContainer\\) { \"$\\($_.FullName\\)/\" } else { $_.FullName } })"
     ]
   }
 }
