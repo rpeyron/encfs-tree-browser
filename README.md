@@ -167,7 +167,7 @@ which runs `tsc` and emits `dist/` — that `dist/` is what the app imports
 | `src/lib/tree-builder.ts` | `codec.encryptName(component, parentIv)` | Decoded → encoded name of one path component |
 | `src/lib/tree-builder.ts` | `codec.chainedNameIv` | Whether children's names chain their parent's IV |
 
-The codec instance is stored in React state (`useState<EncfsNameCodec | null>`); the
+The codec instance is stored in app state (`useState<EncfsNameCodec | null>`); the
 password is only ever passed to `fromV6Xml`, kept in memory by default (cleartext
 localStorage only with the explicit per-config "Remember" opt-in).
 
@@ -184,7 +184,7 @@ the link already points at the source tree.
 
 ### Key Technologies
 
-- **React + TypeScript**: Type-safe UI components
+- **Preact + TypeScript**: React-compatible UI (source imports `react`, the runtime is aliased to `preact/compat` in `vite.config.ts` — keeps the standalone bundle ~56% smaller)
 - **Vite**: Fast build tool and dev server
 - **encfs-filename-codec**: EncFS filename crypto (Web Crypto API: PBKDF2, AES, HMAC‑SHA1)
 - **Plain CSS**: Direct CSS styling for maintainability and reliability
@@ -286,7 +286,7 @@ with real encrypted trees and Rust golden vectors.
 ```
 encfs-tree-browser/
 ├── src/
-│   ├── components/      # React UI (TreeGrid, TreeToolbar, ConfigModal, DirectorySetup, BatchConvert, …)
+│   ├── components/      # UI components (Preact runtime) — TreeGrid, TreeToolbar, ConfigModal, DirectorySetup, BatchConvert, …
 │   ├── lib/            # Core logic
 │   │   ├── fs-scanner.ts
 │   │   ├── tree-builder.ts
@@ -300,7 +300,7 @@ encfs-tree-browser/
 │   ├── assets/configs/ # Bundled sample .encfs6.xml + sample path lists (inlined in standalone build)
 │   ├── styles/         # app.css (plain CSS)
 │   ├── types/          # TypeScript types
-│   ├── hooks/          # React hooks
+│   ├── hooks/          # Custom UI hooks (useClipboard)
 │   └── App.tsx         # Main app (tabs: convert / browse)
 ├── tests/              # Test files
 │   ├── fixtures/       # Real EncFS 1.9.5 vector configs

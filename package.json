@@ -14,14 +14,13 @@
   },
   "dependencies": {
     "encfs-filename-codec": "file:../encfs-names-ts",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "preact": "^10.29.8"
   },
   "devDependencies": {
+    "@prefresh/vite": "^4.0.1",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
-    "@vitejs/plugin-react": "^6.1.0",
     "@vitest/ui": "^4.1.11",
     "oxlint": "^1.79.0",
     "typescript": "~6.0.2",

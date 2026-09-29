@@ -15,7 +15,9 @@ Usage, npm-package wiring and build instructions: [../README.md](../README.md).
 - **`encfs-filename-codec` (`file:../encfs-names-ts`)**: all EncFS filename crypto in one
   local package — MAC-verified, vector-tested, reusable. Rebuild it (`npm run build` in
   `encfs-names-ts`) after editing it; the app has no crypto code of its own
-- **React hooks**: state management at app scope (no context/Redux)
+- **Hooks-based state**: state management at app scope (no context/Redux); source uses
+  React's API while the bundled runtime is Preact (`preact/compat` alias + automatic
+  JSX from `preact/jsx-runtime` in `vite.config.ts`) — no functional difference
 - **Plain CSS**: `src/styles/app.css` only — Tailwind v4 + `@tailwindcss/postcss` broke
   with Vite (CSS not generated), so utility frameworks are banned here
 - **localStorage**: configurations, active id, directory setup (per config), display prefs;
@@ -78,11 +80,11 @@ Usage, npm-package wiring and build instructions: [../README.md](../README.md).
 
 ```
 src/
-  ├── components/      # React UI components
+  ├── components/      # UI components (Preact runtime)
   ├── lib/             # Core logic (tree-building, fs-scanning, persistence)
   ├── styles/          # CSS stylesheets
   ├── types/           # Shared TypeScript types
-  ├── hooks/           # Custom React hooks
+  ├── hooks/           # Custom UI hooks
   ├── App.tsx          # Main app component
   ├── main.tsx         # Entry point
   └── index.css        # Global CSS (body/reset; app styles live in styles/app.css)
@@ -178,10 +180,12 @@ through the uploaded listing format (see `src/lib/listing-parser.ts`).
 
 ## Build
 
-- `npm run build` → `dist/` (normal multi-file build)
+- `npm run build` → `dist/` (normal multi-file build, target es2022)
 - `npm run build:standalone` → `dist-standalone/encfs-browser.html` (single self-contained file,
   via `vite-plugin-singlefile` in `vite.config.ts` mode `standalone`; sample xml configs
   are inlined through `?raw` imports)
+- Sizes (gzip): JS ≈ 123 KB (42 KB), CSS ≈ 18 KB (4 KB), standalone ≈ 140 KB (46 KB) —
+  Preact runtime + dead-CSS removal cut the previous bundle by more than half
 
 ## Future Enhancements
 

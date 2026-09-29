@@ -1,4 +1,5 @@
-import React, { useRef } from 'react';
+import { useRef } from 'react';
+import type { ChangeEvent, DragEvent } from 'react';
 
 interface ConfigUploaderProps {
   onConfigLoaded: (content: string) => void;
@@ -18,14 +19,14 @@ export function ConfigUploader({ onConfigLoaded, onError, isLoading, compact }: 
     }
   };
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     await readFile(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = async (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.currentTarget.classList.remove('uploader-drop-active');
     const file = e.dataTransfer.files?.[0];

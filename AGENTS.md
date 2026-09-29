@@ -2,7 +2,7 @@
 
 ## Project
 
-EncFS Tree Browser — React + Vite + TypeScript web app that browses EncFS-encrypted
+EncFS Tree Browser — Preact (React-compatible API) + Vite + TypeScript web app that browses EncFS-encrypted
 directory trees (File System Access API) and shows encoded ↔ decoded filenames side by side.
 
 ## Docs
@@ -16,6 +16,11 @@ directory trees (File System Access API) and shows encoded ↔ decoded filenames
 
 - **No crypto in this app**: filename crypto comes only from `encfs-filename-codec`
   (`file:../encfs-names-ts`). Rebuild that package after editing it: `cd ../encfs-names-ts && npm run build`
+- **Runtime**: source imports `react` / `react-dom/client`, but `vite.config.ts` aliases
+  them to `preact/compat` (+ `preact/compat/client`) — no `react`/`react-dom` packages
+  installed, only `@types/react*` for TypeScript. Keep imports React-compatible; JSX uses
+  the automatic `preact/jsx-runtime` (the `oxc.jsx` block there is required — prefresh
+  would otherwise emit classic `h()`)
 - **Password**: memory only by default — passed straight to `EncfsNameCodec.fromV6Xml`,
   never logged; persistence only via the per-config "Remember" opt-in (cleartext localStorage)
 - **Plain CSS** in `src/styles/app.css`; no Tailwind or utility frameworks
