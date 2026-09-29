@@ -5,17 +5,22 @@ Usage, npm-package wiring and build instructions: [../README.md](../README.md).
 
 ## Architecture
 
-- **File System Access API**: browser native, no server, Chrome/Edge only
+- **File System Access API**: browser native, no server, Chrome/Edge for directory
+  browsing; browsers without it still work via the listing-file fallback and batch convert
 - **Tree grid**: plain recursive rows in `TreeGrid.tsx` — lazy expansion keeps the DOM small;
   virtualisation is a future enhancement, not current behaviour
+- **Single directory browsing**: a configuration (xml + password) is separate from its
+  directory binding; the binding grafts its tree at the mount point (`src/lib/chain.ts`),
+  and the mount point also seeds the chained-IV walk for `chainedNameIV` volumes
 - **`encfs-filename-codec` (`file:../encfs-names-ts`)**: all EncFS filename crypto in one
   local package — MAC-verified, vector-tested, reusable. Rebuild it (`npm run build` in
   `encfs-names-ts`) after editing it; the app has no crypto code of its own
 - **React hooks**: state management at app scope (no context/Redux)
 - **Plain CSS**: `src/styles/app.css` only — Tailwind v4 + `@tailwindcss/postcss` broke
   with Vite (CSS not generated), so utility frameworks are banned here
-- **localStorage**: config XML, mode, mount point, directory name
-- **IndexedDB**: `FileSystemDirectoryHandle` (`persist-dir.ts`) so the directory survives reloads
+- **localStorage**: configurations, active id, directory setup (per config), display prefs;
+  optional cleartext password per config (opt-in only)
+- **IndexedDB**: `FileSystemDirectoryHandle` per `dir:<configId>:<stepId>` (`persist-dir.ts`)
 
 ## Key Files & Responsibilities
 
@@ -23,19 +28,30 @@ Usage, npm-package wiring and build instructions: [../README.md](../README.md).
 - `.encfs6.xml` parsing, volume key derivation, Block/Stream name ciphers, EncFS base64,
   chained name IVs. The app never parses the config itself
 
+**Configuration & state:**
+- `src/lib/config-store.ts` — user configs / active id / steps / prefs in localStorage,
+  password sanitizing, legacy-key migration
+- `src/lib/builtin-configs.ts` — bundled sample configs (`?raw` xml imports)
+
 **Tree building / scanning:**
-- `src/lib/tree-builder.ts` — tree construction, chained-IV conversion of each level,
-  full path mapping, mount point offset
+- `src/lib/tree-builder.ts` — tree construction (FSA levels + eager listing trees),
+  chained-IV conversion, full path mapping
+- `src/lib/chain.ts` — step grafting at mount points, id prefixing, path conversion helpers
+- `src/lib/listing-parser.ts` — directory listing file parser (format spec)
 - `src/lib/fs-scanner.ts` — File System Access API wrapper (one directory level)
 
 **Persistence:**
-- `src/lib/persist-dir.ts` — save/load the directory handle via IndexedDB (avoids re-selection)
+- `src/lib/persist-dir.ts` — save/load directory handles via IndexedDB (keyed per step)
 
 **UI components** (`src/components/`):
 - `TreeGrid.tsx` — tree rendering (expand/collapse, copy buttons, lazy children)
-- `ConfigUploader.tsx` — `.encfs6.xml` upload
-- `DirectoryPicker.tsx` — File System Access API picker
-- `ModeSelector.tsx`, `MountPointInput.tsx`, `SearchBar.tsx` — configuration UI
+- `ConfigManager.tsx` — config dropdown, password + Remember, add/replace/delete config
+- `ChainBindings.tsx` — (removed) directory bindings now live in `DirectorySetup.tsx`
+- `DirectorySetup.tsx` — single directory bar (source, mode, mount point) in the Tree tab
+- `ConfigModal.tsx` — add/edit/delete configuration modal
+- `BatchConvert.tsx` — batch encode/decode (table/tree views)
+- `ConfigUploader.tsx`, `DirectoryPicker.tsx`, `DirectoryListingUpload.tsx`,
+  `SearchBar.tsx` — supporting inputs
 
 **Styling:**
 - `src/styles/app.css` — all application styling
@@ -43,6 +59,9 @@ Usage, npm-package wiring and build instructions: [../README.md](../README.md).
 
 **Testing:**
 - `tests/lib/tree-builder.test.ts` — chained-IV conversion + package wiring (MUST PASS)
+- `tests/lib/chain.test.ts` — grafting, id helpers, path conversion
+- `tests/lib/config-store.test.ts` — store round-trips, password sanitizing, migration
+- `tests/lib/listing-parser.test.ts` — listing parsing + eager tree vs fixture vectors
 - `tests/fixtures/encfs-real-test-vectors.json` — real EncFS 1.9.5 encoded/decoded pairs
 
 ## EncFS Integration (delegated to `encfs-filename-codec`)
@@ -98,8 +117,9 @@ docs/                  # This file + functional requirements
 
 ## Testing
 
-- **Unit tests**: `tests/lib/tree-builder.test.ts` — chained-IV conversion in both modes,
-  raw-name fallback, package wiring (password rejection, round-trips)
+- **Unit tests**: `tests/lib/` — tree-builder (chained-IV conversion in both modes,
+  raw-name fallback, package wiring), chain (grafting, path conversion), config-store
+  (round-trips, password sanitizing, legacy migration), listing-parser (format + eager tree)
 - **Crypto algorithm tests**: `../encfs-names-ts` (`npm test` there)
 - **Not yet covered**: component/UI tests (`@testing-library` deliberately not installed)
 
@@ -114,16 +134,19 @@ docs/                  # This file + functional requirements
 
 | Browser | Support | Notes |
 |---------|---------|-------|
-| Chrome 90+ | Full | File System Access API required |
-| Edge 90+ | Full | File System Access API required |
-| Firefox | No | File System Access API not supported |
-| Safari | No | File System Access API not supported |
+| Chrome 90+ | Full | File System Access API for directory browsing |
+| Edge 90+ | Full | File System Access API for directory browsing |
+| Firefox | Partial | Listing-file fallback + batch convert; no directory picker |
+| Safari | Partial | Listing-file fallback + batch convert; no directory picker |
 
-No fallback is planned (requires File System Access API).
+Browsers without the File System Access API cannot open a directory directly; they work
+through the uploaded listing format (see `src/lib/listing-parser.ts`).
 
 ## Security
 
-- **Password**: memory only, never logged or persisted (passed straight to `EncfsNameCodec.fromV6Xml`)
+- **Password**: memory only by default — passed straight to `EncfsNameCodec.fromV6Xml`,
+  never logged. The per-config "Remember" checkbox is an explicit opt-in that stores it
+  in cleartext localStorage; unchecking strips it on save
 - **Crypto**: Web Crypto API only, inside `encfs-filename-codec`; no third-party crypto libraries
 - **Input validation**: config and user input at boundaries
 - **File access**: only through the File System Access API (user-authorized)
@@ -137,12 +160,15 @@ No fallback is planned (requires File System Access API).
 
 ## Important Constraints
 
-1. **File System Access API** is Chrome/Edge only — no Safari/Firefox support
-2. **Password handling**: keep in memory only, never persist or log
+1. **Directory browsing** needs the File System Access API (Chrome/Edge); elsewhere use
+   the listing fallback
+2. **Password handling**: memory only by default; persistence requires explicit opt-in
 3. **Large trees**: must support 10,000+ items with smooth scrolling/expand
 4. **Mode detection**: user specifies encoded/decoded, don't guess
 5. **Column redundancy**: Name (primary) + Alternate (secondary); no Type column (icon only)
 6. **Styling**: plain CSS only; no utility frameworks
+7. **Directory ≠ config**: the directory binding (mount point, mode, source) belongs to the
+   browsing setup, not to the EncFS configuration entity; one directory per configuration
 
 ## Known Issues & Workarounds
 
@@ -150,15 +176,24 @@ No fallback is planned (requires File System Access API).
 2. The former volume-key decryption blocker is resolved: all filename crypto lives in
    `encfs-filename-codec`, MAC-verified against real EncFS 1.9.5 trees and Rust golden vectors
 
+## Build
+
+- `npm run build` → `dist/` (normal multi-file build)
+- `npm run build:standalone` → `dist-standalone/index.html` (single self-contained file,
+  via `vite-plugin-singlefile` in `vite.config.ts` mode `standalone`; sample xml configs
+  are inlined through `?raw` imports)
+
 ## Future Enhancements
 
-1. ✅ Config persistence (localStorage + IndexedDB dir handle)
-2. Drag & drop file upload
-3. Auto-detect mode
-4. Export to CSV/JSON
-5. Statistics panel
-6. Keyboard navigation
-7. Advanced filtering
-8. Compare view (split screen)
-9. Batch operations
-10. Error recovery on partial scan
+1. ✅ Config persistence (localStorage + IndexedDB dir handles)
+2. ✅ Batch encode/decode (table + tree views)
+3. ✅ Single-directory browse with bundled sample listings
+4. ✅ Standalone single-file build
+5. Drag & drop file upload
+6. Auto-detect mode
+7. Export to CSV/JSON
+8. Statistics panel
+9. Keyboard navigation
+10. Advanced filtering
+11. Compare view (split screen)
+12. Error recovery on partial scan

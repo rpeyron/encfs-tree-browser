@@ -9,30 +9,62 @@ Technical constraints, architecture and code style live in [requirements-technic
 ## Core Features
 
 ### 1. Configuration & Setup
-- **Upload EncFS Config**: Users upload the `.encfs6.xml` configuration file from an EncFS volume
-- **Password Entry**: Users provide the EncFS password for decryption
-- **Directory Selection**: Users select a local directory via File System Access API (the portion of the tree to display)
-- **Mode Selection**: Users specify whether the selected directory contains encoded or decoded filenames
-- **Mount Point**: Users optionally specify where this directory portion connects in the broader EncFS tree (default: "/")
+- **Header configuration cluster**: a dropdown in the app header lists user configs
+  saved in localStorage first, then bundled sample configs (hardcoded in
+  `src/lib/builtin-configs.ts`, password `test`), and finally a special
+  **"➕ Add configuration…"** entry that opens the add modal. Each configuration holds
+  **one `.encfs6.xml` + one password** (crypto only)
+- **Add config**: selecting the "Add…" dropdown entry opens a **modal** (name + upload
+  `.encfs6.xml` + **Remember password** checkbox) saved to localStorage
+- **Edit/Delete config**: the button right beside the dropdown opens the same modal for
+  the active config (rename, replace xml, Remember, delete) — enabled for user configs
+  only; samples show a lock 🔒 (read-only; duplicating into a user config is possible
+  via "Add configuration…")
+- **Password entry**: input beside the dropdown; default is memory-only. The modal's
+  opt-in **"Remember password" checkbox** stores the password in cleartext in
+  localStorage for that configuration; unchecking strips it on the next save
+- **Single directory** (Browse tab, shown only when the browser supports the File
+  System Access API): the directory line sits in the header right of the Browse tab and
+  defines:
+  - **Select directory…** button (File System Access API)
+  - a **mode**: whether names on disk are encoded or decoded
+  - a **mount point** — shown **only when the active config enables name chaining**
+    (`chainedNameIV`); it grafts the directory into the displayed tree and seeds the
+    chained-IV walk
+  - a **Scan** button right after the mode/mount controls
+- **Sample path lists**: built-in samples ship with the EncFS 1.9.5 fixture file list
+  (`src/assets/configs/*.samples*.txt`), loadable in the Convert tab in the form
+  matching the selected direction (decoded list for Encode, encoded list for Decode)
+- The directory binding is **separate from the configuration** (persisted under
+  `encfs-tree-steps:<configId>`)
 
 **Validation & Error Handling:**
-- Validate `.encfs6.xml` format on upload
+- Validate `.encfs6.xml` format on codec creation (wrong password rejected by MAC check)
 - Allow re-entry of password if decode fails
 - Support for editing configuration without full reset
 - Graceful error messages with recovery options
 
 ### 2. Directory Scanning & Tree Display
-- **Lazy Loading**: Initial scan retrieves only top-level directory (root + direct children)
-- **On-Demand Expansion**: When user expands a folder, load its children from disk
-- **Recursive Loading**: Option for users to load entire tree at once ("Expand All" / "Load Full Tree")
-- **Performance**: Virtual scrolling for smooth display of large trees (1000+ items)
+- **Lazy Loading**: FSA-backed scan retrieves only the requested level; children are
+  loaded on demand
+- **On-Demand Expansion**: toolbar actions **▾ Expand 1 level**, **▾▾ Expand all**,
+  **▴ Collapse all**
 - **Bidirectional Naming**:
   - If directory is encoded: show decoded names, with encoded variant visible
   - If directory is decoded: show encoded names, with decoded variant visible
-  - Mapping togglable per row
-- **Directory Persistence**: The selected directory handle is stored in IndexedDB (`encfs-db`,
-  object store `handles`, key `dir`) and re-requested on next load, so the user does not
-  have to re-select the directory when restarting the app.
+  - **Swap toggle** (⇄) flips which of encoded/decoded is the primary column,
+    without re-scanning (preference persisted in localStorage)
+- **Sort toggle (A→Z Sort)**: alphabetical sort of names at the root and inside every
+  directory, by the **displayed primary name** (decoded or encoded following the
+  current display); persisted in localStorage
+- Views: **Convert** (list encode/decode, first tab) and **Browse** (directory tree);
+  the Browse tab is **hidden when the browser lacks the File System Access API**
+- The tree area occupies all vertical space left (toolbar + grid only; the directory
+  line lives in the header)
+- **Directory Persistence**: directory handles are stored in IndexedDB (`encfs-db`,
+  object store `handles`, key `dir:<configId>:<stepId>`) and re-requested on next load
+- **Theming**: light/dark appearance follows the system preference
+  (`prefers-color-scheme`)
 
 ### 3. Columns & Display
 **Primary columns:**
@@ -48,8 +80,8 @@ Technical constraints, architecture and code style live in [requirements-technic
 - Show/hide columns via dropdown menu
 - Reorder columns by dragging header
 - Resize columns by dragging column border
-- Configuration persists in localStorage (config XML, mode, mount point, directory name);
-  the directory handle itself persists in IndexedDB
+- Preferences persist in localStorage (`encfs-tree-prefs`); directory handles persist
+  in IndexedDB
 
 ### 4. Navigation & Interaction
 - **Expand/Collapse**:
@@ -68,22 +100,27 @@ Technical constraints, architecture and code style live in [requirements-technic
   - Ctrl+E: Export
 
 ### 5. Clipboard Operations
-- **Copy Path Buttons**: Each row has 2 buttons:
-  - Copy main path (encoded or decoded based on mode)
-  - Copy alternate path (the other representation)
-- **Full Path**: Include complete path from root to current node (all parent directories plus
-  the filename) — the encoded button copies the full encoded path and the decoded button copies
-  the full decoded path
-- **Feedback**: Visual confirmation (✓ toast) when copied
+- **Copy Path Buttons**: Each row has 2 buttons pairing a clipboard icon with the
+  name representation: **📋🔒** copies the full encoded path, **📋🔓** copies the full
+  decoded path
+- **Full Path**: complete path from root to current node (all parent directories plus
+  the filename), in the respective representation
+- **Feedback**: Visual confirmation (✓) when copied
 - **Keyboard Support**: Ctrl+C on selected row copies main path
 
-### 5b. Path Converter
-- **Convert path input**: A field in the display toolbar accepts a full path; the app converts
-  every segment (decode or encode) and shows the result
-- **Result display**: The converted path appears on its own line directly below the input row
-  (inside `.convert-bar`), alongside a clipboard button (📋) to copy it
-- **Enter** triggers decode; a **Decode** and an **Encode** button trigger the respective
-  direction
+### 5c. Convert Tab
+- **Input**: a textbox (one name or full path per line) **or** a loaded `.txt` file,
+  **or** the **📄 Sample list** button (built-in samples: loads the fixture path list in
+  the form matching the selected direction)
+- **Direction toggle**: Encode or Decode (one direction at a time)
+- **Views**: results as a **table** (input | output, failed lines highlighted in red)
+  or as a **tree** — the tree uses the **same component, toolbar and behaviour as
+  Browse** (search, sort, expand/collapse, swap primary, copy buttons), built from the
+  converted input/output path pairs
+- **Copy all**: copies every converted output, one per line
+- Needs only the active configuration + password (no directory); a failed line is
+  reported per row and never aborts the batch
+- A single path is converted by entering it alone in the textbox
 
 ### 6. EncFS Name Encoding/Decoding
 - **Supported Algorithms**:
@@ -111,12 +148,9 @@ Technical constraints, architecture and code style live in [requirements-technic
 ### 7. View Options & Preferences
 - **Statistics Panel** (optional): Show totals (file count, folder count, total size, max depth)
 - **Load Full Tree**: Option to pre-load entire tree recursively
-- **Configuration Persistence**: Store in localStorage:
-  - Visible columns and order
-  - Sort order
-  - Recently used directories
-  - Preferred mode (encoded/decoded)
-  - Theme preference
+- **Persistence** (localStorage): active configuration id, user configurations, directory
+  binding per configuration, display preferences (primary column, sort), optionally the
+  password (opt-in, cleartext)
 
 ### 8. Error States & Recovery
 - **Invalid Config**: Show error with option to re-upload
@@ -125,28 +159,60 @@ Technical constraints, architecture and code style live in [requirements-technic
 - **Decode Errors**: Mark affected items, show count of errors, suggest password review
 - **Partial Failures**: Continue scanning even if individual items fail
 
+### 9. Standalone Single-File Build
+- `npm run build:standalone` bundles the whole app (JS, CSS, sample `.encfs6.xml`
+  configs) into one self-contained `dist-standalone/index.html`
+- Runs offline from disk (`file://`), no server required
+
 ## User Flows
 
-### Flow 1: Browse Encrypted Directory
-1. User uploads `.encfs6.xml` config
-2. User enters EncFS password
-3. User selects an encrypted directory via File System Access API
-4. User selects "Encoded" mode
-5. App scans level 1, shows tree with decoded names + encoded alternates
-6. User expands folders on-demand to navigate
-7. User can copy decoded paths to clipboard
+### Flow 1: Browse Encrypted Directory (Chrome/Edge)
+1. Header: pick a configuration in the dropdown (samples first entry is user list,
+   samples last, "Add configuration…" opens the modal)
+2. Enter the password (optionally check "Remember password" in the modal)
+3. Browse tab: **📂 Select directory…**, set mode (mount point appears only for
+   chainedNameIV configs), click **🔍 Scan**
+4. Decoded names + encoded alternates; expand, search, sort, swap, copy 📋🔒/📋🔓
 
-### Flow 2: Compare Encrypted vs Decrypted
-1. User uploads config and password
-2. User selects the encrypted directory → mode "Encoded"
-3. User navigates and views bidirectional mapping
-4. User can optionally load decrypted directory → mode "Decoded"
-5. User compares paths between the two views
+### Flow 2: Swap / Sort Display
+1. Tree loaded from a directory (either mode)
+2. Toolbar **⇄ Swap** flips which representation is the primary column, no re-scan
+3. Toolbar **A→Z Sort** toggles alphabetical ordering by the displayed name at the
+   root and inside every directory
 
-### Flow 3: Search & Filter
+### Flow 3: Convert Lists
+1. Header: select configuration + password
+2. Convert tab: paste names/paths, load a file, or **📄 Sample list** (matches the
+   selected direction), choose Encode or Decode
+3. Convert → inspect table or tree view (same tree as Browse), copy results
+
+### Flow 4: Search & Filter
 1. User has loaded directory tree
 2. User enters search term in search bar
 3. Results filter in real-time (debounced)
 4. Matching items highlighted
 5. User can copy matching path directly
+
+### Flow 5: Handle Errors
+1. Invalid password → re-enter password
+2. Scan fails → error banner with recovery, configuration preserved
+3. Config invalid → replace the xml of the active user configuration
+
+## Out of Scope
+
+- Modifying files or directories
+- Network/cloud EncFS mounts beyond what the browser can open
+- Encryption/decryption of file contents (only filename display)
+- Multi-user/collaboration features
+- Full EncFS configuration editing
+- Guessing the encoded/decoded mode (the user always specifies it)
+
+## Assumptions
+
+- Users have access to the `.encfs6.xml` config file from their EncFS volume
+- Users know their EncFS password
+- Directory browsing needs the File System Access API (Chrome/Edge); elsewhere the
+  Browse tab is hidden and only the Convert tab is available
+- Directory structure follows standard filesystem hierarchy
+- Mount points are given in the on-disk namespace of the directory
 

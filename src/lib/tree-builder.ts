@@ -1,5 +1,5 @@
 import type { EncfsNameCodec } from 'encfs-filename-codec';
-import type { TreeNode } from '../types/index';
+import type { NameMode, TreeNode } from '../types/index';
 import type { FSEntry } from './fs-scanner';
 
 const utf8 = new TextDecoder('utf-8', { fatal: true });
@@ -28,11 +28,14 @@ async function parentDirIv(
 export async function buildTreeLevel(
   entries: FSEntry[],
   codec: EncfsNameCodec,
-  mode: 'encoded' | 'decoded',
+  mode: NameMode,
   parentPath: string = '',
+  // Directory mounted mid-tree: IVs chain from the real volume path, not the dir-root-relative parentPath
+  ivBasePath?: string,
 ): Promise<TreeNode[]> {
   const nodes: TreeNode[] = [];
-  const dirIv = parentPath ? await parentDirIv(codec, parentPath, mode) : 0n;
+  const ivBase = ivBasePath ?? parentPath;
+  const dirIv = ivBase ? await parentDirIv(codec, ivBase, mode) : 0n;
 
   for (const entry of entries) {
     const id = `${parentPath}/${entry.name}`;
@@ -72,6 +75,9 @@ export async function buildTreeLevel(
   return nodes;
 }
 
+const joinPath = (base: string, segment: string): string =>
+  base ? `${base}/${segment}` : `/${segment}`;
+
 export function buildFullPaths(
   nodes: TreeNode[],
   parentPath: string = '',
@@ -79,18 +85,17 @@ export function buildFullPaths(
   parentPathEncoded: string = ''
 ): TreeNode[] {
   return nodes.map((node) => {
-    const pathDecoded =
-      parentPathDecoded + (parentPathDecoded ? '/' : '') + node.nameDecoded;
-    const pathEncoded =
-      parentPathEncoded + (parentPathEncoded ? '/' : '') + node.nameEncoded;
+    const path = joinPath(parentPath, node.name);
+    const pathDecoded = joinPath(parentPathDecoded, node.nameDecoded);
+    const pathEncoded = joinPath(parentPathEncoded, node.nameEncoded);
 
     return {
       ...node,
-      path: parentPath + (parentPath ? '/' : '') + node.name,
+      path,
       pathDecoded,
       pathEncoded,
       children: node.children
-        ? buildFullPaths(node.children, node.path, pathDecoded, pathEncoded)
+        ? buildFullPaths(node.children, path, pathDecoded, pathEncoded)
         : undefined,
     };
   });

@@ -1,5 +1,10 @@
 // Persist FileSystemDirectoryHandle via IndexedDB
-export function saveDirHandle(handle: FileSystemDirectoryHandle): Promise<void> {
+const LEGACY_KEY = 'dir';
+
+export const dirHandleKey = (configId: string, stepId: string): string =>
+  `dir:${configId}:${stepId}`;
+
+export function saveDirHandle(handle: FileSystemDirectoryHandle, key: string = LEGACY_KEY): Promise<void> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('encfs-db', 1);
     request.onupgradeneeded = () => {
@@ -9,7 +14,13 @@ export function saveDirHandle(handle: FileSystemDirectoryHandle): Promise<void> 
     request.onsuccess = () => {
       const db = request.result;
       const tx = db.transaction('handles', 'readwrite');
-      tx.objectStore('handles').put(handle, 'dir');
+      try {
+        tx.objectStore('handles').put(handle, key);
+      } catch (err) {
+        db.close();
+        reject(err);
+        return;
+      }
       tx.oncomplete = () => {
         db.close();
         resolve();
@@ -20,7 +31,7 @@ export function saveDirHandle(handle: FileSystemDirectoryHandle): Promise<void> 
   });
 }
 
-export function loadDirHandle(): Promise<FileSystemDirectoryHandle | null> {
+export function loadDirHandle(key: string = LEGACY_KEY): Promise<FileSystemDirectoryHandle | null> {
   return new Promise(resolve => {
     const request = indexedDB.open('encfs-db', 1);
     request.onupgradeneeded = () => {
@@ -30,18 +41,17 @@ export function loadDirHandle(): Promise<FileSystemDirectoryHandle | null> {
     request.onsuccess = () => {
       const db = request.result;
       const tx = db.transaction('handles', 'readonly');
-      const getReq = tx.objectStore('handles').get('dir');
+      const getReq = tx.objectStore('handles').get(key);
       getReq.onsuccess = async () => {
-        const handle = getReq.result as FileSystemDirectoryHandle;
+        const handle = getReq.result as FileSystemDirectoryHandle | undefined;
         if (handle) {
-          // request permission if needed
-          const perm = (handle as any).requestPermission?.({ mode: 'read' });
-          if (perm) {
-            const result = await perm;
-            resolve(result === 'granted' ? handle : null);
-          } else {
-            resolve(handle);
-          }
+          const withPerm = handle as FileSystemDirectoryHandle & {
+            requestPermission?: (desc: { mode: 'read' }) => Promise<PermissionState>;
+          };
+          const result = withPerm.requestPermission
+            ? await withPerm.requestPermission({ mode: 'read' })
+            : 'granted';
+          resolve(result === 'granted' ? handle : null);
         } else {
           resolve(null);
         }

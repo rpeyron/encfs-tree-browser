@@ -5,18 +5,23 @@ A web application for viewing and navigating EncFS-encrypted directory trees wit
 ## Features
 
 - **View encrypted directories**: Load an EncFS volume and see decoded filenames alongside their encrypted counterparts
-- **Bidirectional mapping**: Switch between viewing encrypted and decoded names as the primary display
+- **Bidirectional mapping**: toolbar Swap flips which of encoded/decoded is the primary column
 - **Large tree support**: lazy loading keeps browsing responsive on big volumes
-- **Lazy loading**: On-demand expansion of directories for minimal initial load time
+- **Single directory browse**: pick one directory in the Browse tab (Chrome/Edge), with mode + mount point (mount point shown only when the config enables name chaining)
+- **Sort toggle**: alphabetical sort by displayed name at the root and inside every directory
 - **Search & filter**: Real-time search across filenames
-- **Clipboard operations**: Copy full paths (encoded or decoded) to clipboard with one click
-- **Path converter**: Convert an arbitrary path (encoded ↔ decoded) with a copy button on the result
-- **Config persistence**: Restores config, mode, mount point, and directory across reloads
-- **Mount point configuration**: Specify where a directory portion connects in the broader EncFS tree
+- **Clipboard operations**: Copy full encoded (📋🔒) or decoded (📋🔓) paths with one click
+- **Convert tab**: paste or load a list of names/paths, encode or decode, view results as a table or as the same tree as Browse
+- **Named configurations**: header dropdown (your configs first, bundled configs, samples last, "Add…" entry) + edit modal with password **Remember** opt-in — drop extra volumes in `conf/xxxx.encfs6.xml` (gitignored) and they appear automatically as built-ins named `xxxx`
+- **Sample path lists**: built-in samples load their EncFS 1.9.5 test file list into Convert (matching the selected direction)
+- **Config persistence**: configs, directory setup, and display preferences survive reloads
+- **Dark mode**: follows the system light/dark preference
+- **Standalone build**: one self-contained HTML file that runs offline (`npm run build:standalone`)
 
 ## Requirements
 
-- **Browser**: Chrome 90+, Edge 90+ (uses File System Access API)
+- **Browser**: Chrome 90+, Edge 90+ for directory browsing (File System Access API — the
+  Browse tab only appears when supported). The Convert tab works in any modern browser
 - **EncFS volume**: A directory containing EncFS-encrypted files
 - **EncFS password**: Password for the EncFS volume
 - **.encfs6.xml config**: The configuration file from the EncFS volume
@@ -43,7 +48,8 @@ Opens dev server at `http://localhost:5173`
 ### Build
 
 ```bash
-npm run build
+npm run build              # dist/ (multi-file)
+npm run build:standalone   # dist-standalone/index.html (single file, offline)
 ```
 
 ### Testing
@@ -55,20 +61,25 @@ npm run test:ui       # Open test UI
 
 ## Usage
 
-1. **Upload Configuration**
-   - Upload the `.encfs6.xml` file from your EncFS volume
-   - Enter the EncFS password
+### Header
+- **Configuration dropdown**: your configs first, bundled samples last, then "➕ Add
+  configuration…" which opens the modal; **✏️ Edit** sits right beside the dropdown
+  (user configs only) and holds rename / replace xml / **Remember password** / delete
+- **Password**: input beside the dropdown (memory only unless Remember is saved)
 
-2. **Select Directory**
-   - Click "Select Directory" and choose the encrypted folder on your system
-   - Select the mode (encrypted or decrypted names)
-   - Optionally specify a mount point
+### Convert tab (first)
+- Paste names/paths (one per line), load a file, or click **📄 Sample list** with a
+  built-in sample (loads encoded or decoded paths to match the selected direction)
+- Choose Decode or Encode → **☰ Table** or **🌳 Tree** view (same tree component,
+  toolbar and behaviour as Browse), **📋 Copy all**
 
-3. **Browse**
-   - View the tree with decoded filenames (if directory is encrypted)
-   - Expand folders to explore nested directories
-   - Search for files
-   - Copy full paths to clipboard
+### Browse tab (Chrome/Edge)
+1. Header (Browse tab only): **📂 Select directory…**, set mode (mount point input
+   only appears when the config has name chaining enabled), **🔍 Scan**
+2. Tree with both representations per row
+3. Toolbar: **A→Z Sort**, **▾ Expand 1 level**, **▾▾ Expand all**, **▴ Collapse all**,
+   search, **⇄ Swap** to flip primary column
+4. Copy **📋🔒** (encoded path) / **📋🔓** (decoded path) from any row
 
 ## Architecture
 
@@ -85,22 +96,33 @@ npm run test:ui       # Open test UI
   - One level of entries per call; deeper levels are loaded on demand
 
 - **Tree Building** (`src/lib/tree-builder.ts`)
-  - Hierarchical tree construction from flat file listings
+  - Hierarchical tree construction from a directory scan
   - Computes the chained name IV of a parent directory and converts each child name
     with the package's `encryptName` / `decryptName` (a failed conversion keeps the
     raw name instead of failing the scan)
   - Mount point offset handling
   - Bidirectional name path mapping (full decoded and encoded paths per node)
 
-- **Persistence** (`src/lib/persist-dir.ts`)
-  - Stores the selected `FileSystemDirectoryHandle` in IndexedDB and re‑requests
-    permission on load, avoiding re‑selection after restart
+- **Path tree / filter / sort** (`src/lib/path-tree.ts`, `tree-filter.ts`)
+  - Builds a TreeGrid-compatible forest from Convert input/output pairs
+  - Search filter and alphabetical sort by displayed primary name
+
+- **Persistence** (`src/lib/persist-dir.ts`, `src/lib/config-store.ts`)
+  - Stores directory handles in IndexedDB, keyed `dir:<configId>:<stepId>`, and
+    re-requests permission on load
+  - Stores configurations, directory setup, active id and display prefs in localStorage
+
+- **Chain / grafting** (`src/lib/chain.ts`)
+  - Grafts the directory tree at its mount point; mount points also seed the
+    chained-IV walk for `chainedNameIV` volumes
 
 - **UI Components** (`src/components/`)
   - TreeGrid: recursive tree rows, expand-on-demand (1 level / all / collapse)
-  - ConfigUploader: File upload for .encfs6.xml
-  - DirectoryPicker: File System Access API directory selection
-  - SearchBar, ModeSelector, MountPointInput: Configuration UI
+  - TreeToolbar: shared toolbar (search, sort, expand, swap) for both tabs
+  - ConfigModal: add/edit/delete configuration (modal, includes Remember password)
+  - DirectorySetup: single directory bar (mode, mount point) in the Browse tab
+  - BatchConvert: Convert tab (table view + same tree as Browse)
+  - ConfigUploader, DirectoryPicker, SearchBar: inputs
 
 ### How the npm package is used
 
@@ -130,7 +152,8 @@ which runs `tsc` and emits `dist/` — that `dist/` is what the app imports
 | `src/lib/tree-builder.ts` | `codec.chainedNameIv` | Whether children's names chain their parent's IV |
 
 The codec instance is stored in React state (`useState<EncfsNameCodec | null>`); the
-password is only ever passed to `fromV6Xml` and never persisted.
+password is only ever passed to `fromV6Xml`, kept in memory by default (cleartext
+localStorage only with the explicit per-config "Remember" opt-in).
 
 **Rebuilding after editing the package:** npm does not watch `../encfs-names-ts`.
 After changing it, rebuild it once, then restart the dev server / rerun tests:
@@ -168,7 +191,8 @@ only calls it. Supported there:
 
 ### Limitations
 
-- Requires File System Access API (Chrome/Edge only)
+- Direct directory browsing requires the File System Access API (Chrome/Edge); the
+  Browse tab is hidden elsewhere — the Convert tab works in any modern browser
 - Cannot modify files through this interface
 - Relies on user-selected directories (respects OS permissions)
 
@@ -197,6 +221,10 @@ npm run test:ui
   unicode, chained full paths) against real EncFS 1.9.5 fixture vectors
 - Tree builder: per-directory IV chaining in both modes, fallback to the raw name when
   a name cannot be converted
+- Config store: round-trips, password sanitizing, legacy key migration
+- Chain: grafting at mount points, path conversion helpers
+- Tree filter/sort: search matching both representations, alphabetical sort by
+  displayed primary name
 
 Crypto algorithm tests live in [`encfs-names-ts`](../encfs-names-ts) (`npm test` there),
 with real encrypted trees and Rust golden vectors.
@@ -213,10 +241,10 @@ with real encrypted trees and Rust golden vectors.
 
 | Browser | Support | Notes |
 |---------|---------|-------|
-| Chrome 90+ | ✅ Full | File System Access API required |
-| Edge 90+ | ✅ Full | File System Access API required |
-| Firefox | ❌ No | File System Access API not supported |
-| Safari | ❌ No | File System Access API not supported |
+| Chrome 90+ | ✅ Full | Browse + Convert (File System Access API) |
+| Edge 90+ | ✅ Full | Browse + Convert (File System Access API) |
+| Firefox | ⚠️ Convert only | No File System Access API → Browse tab hidden |
+| Safari | ⚠️ Convert only | No File System Access API → Browse tab hidden |
 
 ## Troubleshooting
 
@@ -242,15 +270,22 @@ with real encrypted trees and Rust golden vectors.
 ```
 encfs-tree-browser/
 ├── src/
-│   ├── components/      # React UI components
+│   ├── components/      # React UI (TreeGrid, TreeToolbar, ConfigModal, DirectorySetup, BatchConvert, …)
 │   ├── lib/            # Core logic
 │   │   ├── fs-scanner.ts
-│   │   ├── persist-dir.ts
-│   │   └── tree-builder.ts
+│   │   ├── tree-builder.ts
+│   │   ├── tree-filter.ts
+│   │   ├── path-tree.ts
+│   │   ├── chain.ts
+│   │   ├── encfs-xml.ts
+│   │   ├── config-store.ts
+│   │   ├── builtin-configs.ts
+│   │   └── persist-dir.ts
+│   ├── assets/configs/ # Bundled sample .encfs6.xml + sample path lists (inlined in standalone build)
 │   ├── styles/         # app.css (plain CSS)
 │   ├── types/          # TypeScript types
 │   ├── hooks/          # React hooks
-│   └── App.tsx         # Main app
+│   └── App.tsx         # Main app (tabs: convert / browse)
 ├── tests/              # Test files
 │   ├── fixtures/       # Real EncFS 1.9.5 vector configs
 │   └── lib/
@@ -268,7 +303,11 @@ When adding new features:
 
 ## Future Enhancements
 
-- [x] Config persistence (localStorage + IndexedDB for the directory handle)
+- [x] Config persistence (configs, directory setup, prefs in localStorage; directory handles in IndexedDB)
+- [x] Convert tab (table + tree views matching Browse)
+- [x] Single-directory Browse with mode + mount point (shown only for chainedNameIV configs)
+- [x] Sort toggle by displayed name (root + every directory)
+- [x] Standalone single-file build (`npm run build:standalone`)
 - [ ] Drag & drop file upload
 - [ ] Auto-detect encoded/decoded mode
 - [ ] Export tree to CSV/JSON
@@ -276,15 +315,15 @@ When adding new features:
 - [ ] Keyboard shortcuts and navigation
 - [ ] Advanced filtering (by size, date range)
 - [ ] Side-by-side comparison view
-- [ ] Batch operations on selected files
 
 ## Security Notes
 
-- Passwords are kept in memory only, never persisted
-- Uses Web Crypto API for all encryption (native browser crypto)
+- Passwords are kept in memory only by default; the per-config **Remember** checkbox is
+  an explicit opt-in that stores the password in cleartext localStorage
+- Uses Web Crypto API for all encryption (native browser crypto, inside `encfs-filename-codec`)
 - File System Access API respects OS-level permissions
 - No data is transmitted to external servers
-- Config files are validated before use
+- Config files are validated before use (MAC check on password)
 
 ## Contributing
 

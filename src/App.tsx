@@ -1,211 +1,337 @@
 import { useState, useRef, useEffect } from 'react';
 import './styles/app.css';
-import { ConfigUploader } from './components/ConfigUploader';
-import { DirectoryPicker } from './components/DirectoryPicker';
-import { ModeSelector } from './components/ModeSelector';
-import { MountPointInput } from './components/MountPointInput';
-import { SearchBar } from './components/SearchBar';
+import { ConfigModal } from './components/ConfigModal';
+import { DirectorySetup } from './components/DirectorySetup';
+import { BatchConvert } from './components/BatchConvert';
+import { TreeToolbar } from './components/TreeToolbar';
 import { TreeGrid } from './components/TreeGrid';
 import { EncfsNameCodec } from 'encfs-filename-codec';
 import { scanDirectory } from './lib/fs-scanner';
-import { buildTreeLevel, buildFullPaths, applyMountPoint, findNodeById } from './lib/tree-builder';
-import type { TreeNode } from './types/index';
-import { saveDirHandle, loadDirHandle } from './lib/persist-dir';
+import { buildTreeLevel, buildFullPaths, findNodeById } from './lib/tree-builder';
+import { graftSteps, prefixIds, relPathOf, normalizeMount } from './lib/chain';
+import { filterNodes, sortTree } from './lib/tree-filter';
+import { BUILTIN_CONFIGS, BUILTIN_SAMPLES, defaultStepFor } from './lib/builtin-configs';
+import { hasChainedNameIv } from './lib/encfs-xml';
+import {
+  loadConfigs,
+  saveConfigs,
+  loadActiveId,
+  saveActiveId,
+  loadPrefs,
+  savePrefs,
+  loadSteps,
+  saveSteps,
+  deleteConfig,
+  migrateLegacy,
+  sanitizeForStorage,
+} from './lib/config-store';
+import { saveDirHandle, loadDirHandle, dirHandleKey } from './lib/persist-dir';
+import type {
+  AppPrefs,
+  DirBindingStep,
+  EncfsConfiguration,
+  NameMode,
+  TreeNode,
+} from './types/index';
 
+type View = 'convert' | 'browse';
 
-type AppState = 'setup' | 'scanning' | 'display';
+const SUPPORTS_FSA = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
 
-interface PersistedConfig {
-  configXml?: string;
-  mode: 'encoded' | 'decoded';
-  mountPoint: string;
-  dirName?: string;
+migrateLegacy();
+
+async function mountNamespaces(
+  codec: EncfsNameCodec,
+  mount: string,
+  mode: NameMode,
+): Promise<{ mpDecoded: string; mpEncoded: string }> {
+  if (!mount) return { mpDecoded: '', mpEncoded: '' };
+  const bare = mount.replace(/^\/+/, '');
+  if (mode === 'decoded') {
+    try {
+      return { mpDecoded: mount, mpEncoded: `/${await codec.encodePath(bare)}` };
+    } catch {
+      return { mpDecoded: mount, mpEncoded: mount };
+    }
+  }
+  try {
+    return { mpDecoded: `/${await codec.decodePath(bare)}`, mpEncoded: mount };
+  } catch {
+    return { mpDecoded: mount, mpEncoded: mount };
+  }
 }
 
-const STORAGE_KEY = 'encfs-tree-config';
-
-function loadPersisted(): PersistedConfig | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return null;
+function attachChildren(list: TreeNode[], id: string, children: TreeNode[]): TreeNode[] {
+  return list.map((node) => {
+    if (node.id === id) {
+      const existing = node.children ?? [];
+      const loadedIds = new Set(children.map((c) => c.id));
+      return {
+        ...node,
+        children: [...children, ...existing.filter((e) => !loadedIds.has(e.id))],
+        isLoaded: true,
+      };
+    }
+    if (node.children) return { ...node, children: attachChildren(node.children, id, children) };
+    return node;
+  });
 }
 
 export function App() {
-  const persisted = loadPersisted();
+  const [view, setView] = useState<View>(() => (SUPPORTS_FSA ? 'browse' : 'convert'));
+  const [configs, setConfigs] = useState<EncfsConfiguration[]>(() => [
+    ...BUILTIN_CONFIGS,
+    ...loadConfigs(),
+  ]);
+  const [activeId, setActiveId] = useState<string>(
+    () => loadActiveId() ?? BUILTIN_CONFIGS[0].id,
+  );
+  const activeConfig = configs.find((c) => c.id === activeId) ?? null;
 
-  const [state, setState] = useState<AppState>('setup');
-  const [error, setError] = useState('');
-  const [nodes, setNodes] = useState<TreeNode[]>([]);
-  const [search, setSearch] = useState('');
-  const [configXml, setConfigXml] = useState(persisted?.configXml && persisted.configXml !== '' ? persisted.configXml : '');
   const [password, setPassword] = useState('');
-  const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
-  const [dirName, setDirName] = useState(persisted?.dirName ?? '');
-  const [mode, setMode] = useState<'encoded' | 'decoded'>(persisted?.mode ?? 'encoded');
-  const [mountPoint, setMountPoint] = useState(persisted?.mountPoint ?? '/');
+  const [remember, setRemember] = useState(false);
+  const [step, setStep] = useState<DirBindingStep | null>(null);
+  const [modal, setModal] = useState<'add' | 'edit' | null>(null);
+
   const [codec, setCodec] = useState<EncfsNameCodec | null>(null);
+  const codecKeyRef = useRef('');
+  const fsaHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
 
-  // Path converter
-  const [convertPath, setConvertPath] = useState('');
-  const [converted, setConverted] = useState('');
-
-  // Expand/collapse state (lifted from TreeGrid)
+  const [nodes, setNodes] = useState<TreeNode[]>([]);
+  const nodesRef = useRef<TreeNode[]>(nodes);
+  nodesRef.current = nodes;
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState('');
+  const [primary, setPrimary] = useState<NameMode>(
+    () => loadPrefs().displayPrimary ?? 'encoded',
+  );
+  const [sortNames, setSortNames] = useState(() => loadPrefs().sortNames ?? false);
+  const [scanning, setScanning] = useState(false);
+  const [error, setError] = useState('');
 
-  const nodesRef = useRef(nodes);
   useEffect(() => {
-    nodesRef.current = nodes;
-  }, [nodes]);
-
-  // Restore previously saved directory handle (IndexedDB) on startup
-  useEffect(() => {
-    loadDirHandle().then(handle => {
-      if (handle) {
-        setDirHandle(handle);
-        setDirName(handle.name);
-      }
-    });
-  }, []);
-
-  const handleConfigLoaded = (content: string) => {
-    setConfigXml(content);
+    const cfg = configs.find((c) => c.id === activeId);
+    if (!cfg) return;
+    setPassword(cfg.rememberedPassword ?? '');
+    setRemember(Boolean(cfg.rememberedPassword));
+    const raw = loadSteps(activeId)[0];
+    // drop steps persisted by the removed listing feature
+    const legacy = raw as (DirBindingStep & { source?: string }) | undefined;
+    const restored = raw && legacy?.source !== 'listing' ? raw : defaultStepFor(cfg);
+    if (restored !== raw) saveSteps(activeId, [restored]);
+    setStep(restored);
+    fsaHandleRef.current = null;
+    setCodec(null);
+    codecKeyRef.current = '';
     setError('');
+    // configs intentionally omitted: only re-run on config switch
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId]);
+
+  const updateConfig = (cfg: EncfsConfiguration) => {
+    setConfigs((prev) => {
+      const next = prev.map((c) => (c.id === cfg.id ? cfg : c));
+      saveConfigs(
+        next
+          .filter((c) => c.source === 'user')
+          .map((c) => (c.id === cfg.id ? sanitizeForStorage(c, remember) : c)),
+      );
+      return next;
+    });
   };
 
-  const handleDirectorySelected = (handle: FileSystemDirectoryHandle) => {
-    setDirHandle(handle);
-    setDirName(handle.name);
-    saveDirHandle(handle);
+  const ensureCodec = async (): Promise<EncfsNameCodec> => {
+    const key = `${activeId} ${password}`;
+    if (codec && codecKeyRef.current === key) return codec;
+    if (!activeConfig) throw new Error('Select a configuration first');
+    if (!password) throw new Error('Enter the password');
+    const built = await EncfsNameCodec.fromV6Xml(activeConfig.xml, password);
+    setCodec(built);
+    codecKeyRef.current = key;
+    if (activeConfig.source === 'user') {
+      const next = { ...activeConfig };
+      if (remember && password) next.rememberedPassword = password;
+      else delete next.rememberedPassword;
+      updateConfig(next);
+    }
+    return built;
+  };
+
+  const handleStepChange = (next: DirBindingStep) => {
+    setStep(next);
+    if (activeId) saveSteps(activeId, [next]);
+  };
+
+  const handleDirectoryPicked = (handle: FileSystemDirectoryHandle) => {
+    if (!step) return;
+    fsaHandleRef.current = handle;
+    handleStepChange({ ...step, dirName: handle.name });
     setError('');
+    // best effort: an in-memory handle already works for this session
+    if (activeId) {
+      void saveDirHandle(handle, dirHandleKey(activeId, step.id)).catch(() => {});
+    }
+  };
+
+  const resolveHandle = async (): Promise<FileSystemDirectoryHandle | null> => {
+    if (fsaHandleRef.current) return fsaHandleRef.current;
+    if (!activeId || !step) return null;
+    const handle = await loadDirHandle(dirHandleKey(activeId, step.id));
+    if (handle) fsaHandleRef.current = handle;
+    return handle;
+  };
+
+  const handleSelectConfig = (id: string) => {
+    saveActiveId(id);
+    setActiveId(id);
+    setNodes([]);
+    setExpanded({});
+  };
+
+  const handleAddConfig = (data: { name: string; xml: string; remember: boolean }) => {
+    setRemember(data.remember);
+    const cfg: EncfsConfiguration = {
+      id: crypto.randomUUID(),
+      name: data.name,
+      xml: data.xml,
+      source: 'user',
+    };
+    if (data.remember && password) cfg.rememberedPassword = password;
+    saveConfigs([...loadConfigs(), sanitizeForStorage(cfg, data.remember)]);
+    setConfigs((prev) => [...prev, cfg]);
+    saveActiveId(cfg.id);
+    setActiveId(cfg.id);
+    setModal(null);
+  };
+
+  const handleEditConfig = (data: { name: string; xml: string | null; remember: boolean }) => {
+    if (!activeConfig || activeConfig.source !== 'user') return;
+    setRemember(data.remember);
+    const xml = data.xml ?? activeConfig.xml;
+    const next: EncfsConfiguration = { ...activeConfig, name: data.name, xml };
+    if (data.remember && password) next.rememberedPassword = password;
+    else delete next.rememberedPassword;
+    updateConfig(next);
+    if (data.xml) {
+      setCodec(null);
+      codecKeyRef.current = '';
+      setNodes([]);
+    }
+    setModal(null);
+  };
+
+  const handleDeleteConfig = (id: string) => {
+    deleteConfig(id);
+    setConfigs((prev) => prev.filter((c) => c.id !== id));
+    const fallback = BUILTIN_CONFIGS[0].id;
+    saveActiveId(fallback);
+    setActiveId(fallback);
+    setModal(null);
   };
 
   const handleScanClick = async () => {
-    if (!configXml || !password || !dirHandle) {
-      setError('Please provide config, password, and directory');
+    if (!step) {
+      setError('Select a directory first');
       return;
     }
-    setState('scanning');
+    setScanning(true);
     setError('');
     try {
-      const newCodec = await EncfsNameCodec.fromV6Xml(configXml, password);
-      setCodec(newCodec);
-      const entries = await scanDirectory(dirHandle);
-      const tree = await buildTreeLevel(entries, newCodec, mode);
-      const withPaths = buildFullPaths(tree, '', '', '');
-      const withMount = applyMountPoint(withPaths, mountPoint);
-      setNodes(withMount);
-      setState('display');
+      const c = await ensureCodec();
+      const handle = await resolveHandle();
+      if (!handle) throw new Error('Directory missing — select it again');
+      const mount = normalizeMount(step.mountPoint);
+      const entries = await scanDirectory(handle);
+      const tree = await buildTreeLevel(entries, c, step.mode, '', mount);
+      const { mpDecoded, mpEncoded } = await mountNamespaces(c, mount, step.mode);
+      const withPaths = buildFullPaths(tree, mount, mpDecoded, mpEncoded);
+      setNodes(graftSteps([{ mount, nodes: prefixIds(withPaths, step.id) }]));
+      setExpanded({});
+      setLoading({});
+      const prefs: AppPrefs = loadPrefs();
+      if (!prefs.displayPrimary) setPrimary(step.mode);
+      setView('browse');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan directory');
-      setState('setup');
+    } finally {
+      setScanning(false);
     }
   };
 
   const handleExpandNode = async (nodeId: string) => {
-    if (!dirHandle || !codec) return;
+    const node = findNodeById(nodesRef.current, nodeId);
+    if (!node || !step || node.stepId !== step.id) return;
     try {
-      const parts = nodeId.split('/').filter(p => p);
-      let handle: FileSystemDirectoryHandle = dirHandle;
-      for (const part of parts) {
-        handle = await handle.getDirectoryHandle(part);
+      const c = await ensureCodec();
+      const relPath = relPathOf(nodeId);
+      const handle = await resolveHandle();
+      if (!handle) throw new Error('Directory missing — select it again');
+      let target = handle;
+      for (const part of relPath.split('/').filter(Boolean)) {
+        target = await target.getDirectoryHandle(part);
       }
-      const entries = await scanDirectory(handle);
-      const childrenTree = await buildTreeLevel(entries, codec, mode, nodeId);
-      const parentNode = findNodeById(nodesRef.current, nodeId);
-      const basePath = parentNode?.path || '';
-      const baseDecoded = parentNode?.pathDecoded || parentNode?.path || '';
-      const baseEncoded = parentNode?.pathEncoded || parentNode?.path || '';
-      const withPaths = buildFullPaths(childrenTree, basePath, baseDecoded, baseEncoded);
-      const withMount = applyMountPoint(withPaths, mountPoint);
-      setNodes(prev => {
-        const insert = (arr: TreeNode[]): TreeNode[] =>
-          arr.map(n => {
-            if (n.id === nodeId) return { ...n, children: withMount };
-            if (n.children) return { ...n, children: insert(n.children) };
-            return n;
-          });
-        return insert(prev);
-      });
-    } catch (e) {
-      console.error('Failed to expand node', e);
+      const entries = await scanDirectory(target);
+      const loaded = await buildTreeLevel(entries, c, step.mode, relPath, node.path);
+      const withPaths = buildFullPaths(loaded, node.path, node.pathDecoded, node.pathEncoded);
+      setNodes((prev) => attachChildren(prev, nodeId, prefixIds(withPaths, step.id)));
+    } catch (err) {
+      console.error('Failed to expand node', err);
     }
   };
 
-  // Ensure a directory's children are loaded, loading them from disk if needed
   const ensureLoaded = async (nodeId: string): Promise<TreeNode | null> => {
     const node = findNodeById(nodesRef.current, nodeId);
-    if (!node || !node.isDir) return node;
-    if (node.children && node.children.length > 0) return node;
-    return new Promise(resolve => {
-      setLoading(prev => ({ ...prev, [nodeId]: true }));
-      handleExpandNode(nodeId).finally(() => {
-        setLoading(prev => ({ ...prev, [nodeId]: false }));
-        const updated = findNodeById(nodesRef.current, nodeId);
-        resolve(updated);
-      });
-    });
+    if (!node || !node.isDir || node.isLoaded) return node;
+    setLoading((prev) => ({ ...prev, [nodeId]: true }));
+    try {
+      await handleExpandNode(nodeId);
+    } finally {
+      setLoading((prev) => ({ ...prev, [nodeId]: false }));
+    }
+    return findNodeById(nodesRef.current, nodeId);
   };
 
-  // Expand helpers — populate directory content on expansion
   const expandOneLevel = async () => {
-    if (!codec) return;
-    const dirs = nodesRef.current.filter(n => n.isDir);
-    const next: Record<string, boolean> = {};
-    dirs.forEach(n => { next[n.id] = true; });
-    setExpanded(prev => ({ ...prev, ...next }));
+    const dirs = nodesRef.current.filter((n) => n.isDir);
+    setExpanded((prev) => ({ ...prev, ...Object.fromEntries(dirs.map((n) => [n.id, true])) }));
     for (const n of dirs) await ensureLoaded(n.id);
   };
 
   const expandAll = async () => {
-    if (!codec) return;
     const collectDirs = (list: TreeNode[]): TreeNode[] =>
-      list.flatMap(n => n.isDir ? [n, ...(n.children ? collectDirs(n.children) : [])] : []);
+      list.flatMap((n) =>
+        n.isDir ? [n, ...(n.children ? collectDirs(n.children) : [])] : [],
+      );
     const all = collectDirs(nodesRef.current);
-    const next: Record<string, boolean> = {};
-    all.forEach(n => { next[n.id] = true; });
-    setExpanded(prev => ({ ...prev, ...next }));
+    setExpanded((prev) => ({ ...prev, ...Object.fromEntries(all.map((n) => [n.id, true])) }));
     for (const n of all) await ensureLoaded(n.id);
   };
 
   const collapseAll = () => setExpanded({});
 
-  // Path converter — whole path, IV chained per component by the codec
-  const handleConvert = async (direction: 'decode' | 'encode') => {
-    if (!convertPath.trim()) return;
-    if (!codec) {
-      setConverted('Scan a directory first');
-      return;
-    }
-    try {
-      const input = convertPath.trim();
-      const leadSlash = input.startsWith('/');
-      const result =
-        direction === 'decode' ? await codec.decodePath(input) : await codec.encodePath(input);
-      setConverted(result ? (leadSlash ? '/' : '') + result : 'Conversion failed');
-    } catch {
-      setConverted('Conversion error');
-    }
+  const swapPrimary = () => {
+    const next: NameMode = primary === 'encoded' ? 'decoded' : 'encoded';
+    setPrimary(next);
+    savePrefs({ ...loadPrefs(), displayPrimary: next });
   };
 
-  const filteredNodes = search ? filterNodes(nodes, search, mode) : nodes;
+  const toggleSort = () => {
+    setSortNames((v) => {
+      const next = !v;
+      savePrefs({ ...loadPrefs(), sortNames: next });
+      return next;
+    });
+  };
 
   const onToggleNode = (id: string) => {
     const willExpand = !expanded[id];
     if (willExpand) {
-      const node = nodesRef.current && findNodeById(nodesRef.current, id);
-      const alreadyLoaded = node && node.children && node.children.length > 0;
-      if (node && node.isDir && !alreadyLoaded) {
-        setLoading(prev => ({ ...prev, [id]: true }));
-        handleExpandNode(id).finally(() => {
-          setLoading(prev => ({ ...prev, [id]: false }));
-        });
-      }
-      setExpanded(prev => ({ ...prev, [id]: true }));
+      const node = findNodeById(nodesRef.current, id);
+      if (node && node.isDir && !node.isLoaded) void ensureLoaded(id);
+      setExpanded((prev) => ({ ...prev, [id]: true }));
     } else {
-      setExpanded(prev => {
+      setExpanded((prev) => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -213,8 +339,11 @@ export function App() {
     }
   };
 
-  const isScanning = state === 'scanning';
-  const hasSaved = persisted != null;
+  const filteredNodes = search ? filterNodes(nodes, search, primary) : nodes;
+  const visibleNodes = sortNames ? sortTree(filteredNodes, primary) : filteredNodes;
+  const canScan = Boolean(activeConfig && password && step?.dirName && !scanning);
+  const chained = activeConfig ? hasChainedNameIv(activeConfig.xml) : false;
+  const sampleList = activeConfig ? BUILTIN_SAMPLES[activeConfig.id] : undefined;
 
   return (
     <div className="app-container">
@@ -223,154 +352,170 @@ export function App() {
           <h1>EncFS</h1>
           <span>Tree Browser</span>
         </div>
-        {state === 'display' && (
-          <div className="app-header-actions">
-            <p className="app-header-stats">
-              {filteredNodes.length} items{search ? ` (${nodes.length} total)` : ''}
-            </p>
-            <SearchBar value={search} onChange={setSearch} placeholder="Search..." />
-            <div className="header-btn-group">
-              <button onClick={() => void expandOneLevel()} className="header-btn" title="Expand first level, loading contents">▶ 1Lvl</button>
-              <button onClick={() => void expandAll()} className="header-btn" title="Expand all, loading contents">⊞ All</button>
-              <button onClick={collapseAll} className="header-btn" title="Collapse all">⊟ All</button>
-            </div>
-            <button onClick={() => { setState('setup'); setExpanded({}); }} className="header-btn back-btn">Config</button>
+        <nav className="app-tabs">
+          <button
+            className={`app-tab${view === 'convert' ? ' app-tab-active' : ''}`}
+            onClick={() => setView('convert')}
+          >
+            ⚡ Convert
+          </button>
+          {SUPPORTS_FSA && (
+            <button
+              className={`app-tab${view === 'browse' ? ' app-tab-active' : ''}`}
+              onClick={() => setView('browse')}
+            >
+              🌳 Browse
+            </button>
+          )}
+        </nav>
+        {view === 'browse' && step && (
+          <div className="header-dir">
+            <DirectorySetup
+              step={step}
+              chained={chained}
+              onDirectory={(h) => void handleDirectoryPicked(h)}
+              onChange={handleStepChange}
+              onError={setError}
+              disabled={scanning}
+            />
+            <button onClick={() => void handleScanClick()} disabled={!canScan} className="setup-button scan-button">
+              {scanning ? (
+                <span className="setup-button-content">
+                  <span className="setup-spinner"></span>Scanning...
+                </span>
+              ) : (
+                '🔍 Scan'
+              )}
+            </button>
           </div>
         )}
-        {state === 'setup' && (
-          <p className="app-header-subtitle">Navigate encrypted directory trees with bidirectional filename mapping</p>
-        )}
+        <div className="config-cluster">
+          <select
+            className="config-select"
+            value={activeConfig?.id ?? ''}
+            onChange={(e) => {
+              if (e.target.value === '__add__') setModal('add');
+              else handleSelectConfig(e.target.value);
+            }}
+            title="Active configuration"
+          >
+            {[
+              ...configs.filter((c) => c.source === 'user'),
+              ...configs.filter((c) => c.source === 'builtin'),
+            ].map((cfg) => (
+              <option key={cfg.id} value={cfg.id}>
+                {cfg.name}
+                {cfg.source === 'builtin' ? ' (sample)' : ''}
+              </option>
+            ))}
+            <option value="__add__">➕ Add configuration…</option>
+          </select>
+          <button
+            className="icon-btn"
+            title={
+              activeConfig?.source === 'user'
+                ? 'Edit configuration'
+                : 'Sample configs are read-only'
+            }
+            disabled={activeConfig?.source !== 'user'}
+            onClick={() => setModal('edit')}
+          >
+            {activeConfig?.source === 'user' ? '✏️' : '🔒'}
+          </button>
+          <input
+            type="password"
+            className="config-password"
+            placeholder="🔑 Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            title="EncFS password for the selected configuration"
+          />
+        </div>
       </header>
 
       <main className="app-main">
-        {state === 'setup' && (
-          <div className="app-setup">
-            <div className="app-setup-container">
-              <div className="app-setup-header">
-                <h2>Get Started</h2>
-                <p>Configure your EncFS environment in three simple steps</p>
-              </div>
-
-              {hasSaved && (
-                <div className="setup-saved">
-                  <span className="setup-saved-icon">💾</span>
-                  <div>
-                    <p className="setup-saved-title">Saved settings restored</p>
-                    <p className="setup-saved-detail">
-                      {dirName ? `Directory: ${dirName}` : 'No directory saved'} · Mode: {mode} · Mount point: {mountPoint || '/'}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <div className="app-setup-steps">
-                <div className="setup-step">
-                  <div className="setup-step-number">1</div>
-                  <div className="setup-step-content">
-                    <h3 className="setup-step-title">Upload EncFS Config</h3>
-                    <ConfigUploader onConfigLoaded={handleConfigLoaded} onError={setError} isLoading={isScanning} />
-                    {configXml && (
-                      <div className="setup-success">
-                        <span className="setup-success-icon">✓</span>
-                        <span>Configuration loaded</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="setup-step">
-                  <div className="setup-step-number">2</div>
-                  <div className="setup-step-content">
-                    <h3 className="setup-step-title">Enter Password</h3>
-                    <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Your EncFS password" className="setup-password-input" disabled={isScanning} />
-                    <p>Password stays in memory only, never stored</p>
-                  </div>
-                </div>
-                <div className="setup-step">
-                  <div className="setup-step-number">3</div>
-                  <div className="setup-step-content">
-                    <h3 className="setup-step-title">Select Directory & Configure</h3>
-                    <DirectoryPicker onDirectorySelected={handleDirectorySelected} onError={setError} selectedPath={dirHandle?.name || dirName} isLoading={isScanning} />
-                    <div className="setup-options">
-                      <ModeSelector mode={mode} onModeChange={setMode} disabled={isScanning} />
-                      <MountPointInput value={mountPoint} onChange={setMountPoint} disabled={isScanning} />
-                    </div>
-                  </div>
-                </div>
-                {error && (
-                  <div className="setup-error">
-                    <span className="setup-error-icon">⚠</span>
-                    <div>
-                      <p className="setup-error-title">Error</p>
-                      <p className="setup-error-message">{error}</p>
-                    </div>
-                  </div>
-                )}
-                <button onClick={handleScanClick} disabled={!configXml || !password || !dirHandle || isScanning} className="setup-button">
-                  {isScanning ? (
-                    <span className="setup-button-content"><span className="setup-spinner"></span>Scanning...</span>
-                  ) : 'Scan Directory'}
-                </button>
-              </div>
-            </div>
-          </div>
+        {view === 'convert' && (
+          <BatchConvert
+            getCodec={ensureCodec}
+            sampleList={sampleList}
+            primary={primary}
+            onSwap={swapPrimary}
+            sortNames={sortNames}
+            onToggleSort={toggleSort}
+          />
         )}
 
-        {state === 'display' && (
+        {view === 'browse' && (
           <div className="app-display">
-            <div className="convert-bar">
-              <div className="convert-row">
-                <span className="convert-label">Convert path:</span>
-                <input
-                  type="text"
-                  value={convertPath}
-                  onChange={e => { setConvertPath(e.target.value); setConverted(''); }}
-                  onKeyDown={e => { if (e.key === 'Enter') handleConvert('decode'); }}
-                  placeholder="Full path, each segment converted"
-                  className="convert-input"
-                />
-                <button onClick={() => handleConvert('decode')} className="convert-btn">Decode</button>
-                <button onClick={() => handleConvert('encode')} className="convert-btn">Encode</button>
-              </div>
-              {converted && (
-                <div className="convert-output">
-                  <div className="convert-result">
-                    <span className="convert-result-text">{converted}</span>
-                    <button
-                      className="convert-result-copy"
-                      title="Copy result"
-                      onClick={() => navigator.clipboard.writeText(converted)}
-                    >
-                      📋
-                    </button>
-                  </div>
+            {error && (
+              <div className="setup-error tree-error">
+                <span className="setup-error-icon">⚠</span>
+                <div className="setup-error-content">
+                  <p className="setup-error-message">{error}</p>
                 </div>
-              )}
-            </div>
-            <div className="display-content">
-              <TreeGrid
-                nodes={filteredNodes}
-                mode={mode}
-                expanded={expanded}
-                loading={loading}
-                onToggleNode={onToggleNode}
-              />
-            </div>
+              </div>
+            )}
+
+            {nodes.length === 0 ? (
+              <div className="tree-grid-empty">
+                <div className="tree-grid-empty-content">
+                  <div className="tree-grid-empty-icon">🔒</div>
+                  <p>No tree loaded yet</p>
+                  <p className="tree-grid-empty-hint">
+                    Pick an EncFS directory above and hit Scan — or convert name lists in the Convert tab
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <TreeToolbar
+                  total={nodes.length}
+                  filteredCount={filteredNodes.length}
+                  search={search}
+                  onSearch={setSearch}
+                  primary={primary}
+                  onSwap={swapPrimary}
+                  sortNames={sortNames}
+                  onToggleSort={toggleSort}
+                  onExpandOne={() => void expandOneLevel()}
+                  onExpandAll={() => void expandAll()}
+                  onCollapse={collapseAll}
+                />
+                <div className="display-content">
+                  <TreeGrid
+                    nodes={visibleNodes}
+                    primary={primary}
+                    expanded={expanded}
+                    loading={loading}
+                    onToggleNode={onToggleNode}
+                  />
+                </div>
+              </>
+            )}
           </div>
         )}
       </main>
+
+      {modal === 'add' && (
+        <ConfigModal
+          mode="add"
+          config={null}
+          remember={remember}
+          onSave={(d) => d.xml && handleAddConfig({ name: d.name, xml: d.xml, remember: d.remember })}
+          onDelete={() => {}}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal === 'edit' && activeConfig && (
+        <ConfigModal
+          mode="edit"
+          config={activeConfig}
+          remember={remember}
+          onSave={handleEditConfig}
+          onDelete={() => handleDeleteConfig(activeConfig.id)}
+          onClose={() => setModal(null)}
+        />
+      )}
     </div>
   );
-}
-
-function filterNodes(nodes: TreeNode[], search: string, mode: 'encoded' | 'decoded'): TreeNode[] {
-  const q = search.toLowerCase();
-  const filter = (node: TreeNode): TreeNode | null => {
-    const name = mode === 'encoded' ? node.nameDecoded : node.nameEncoded;
-    const match = name.toLowerCase().includes(q);
-    const kids = node.children?.map(filter).filter(Boolean) as TreeNode[] | undefined;
-    const kidMatch = (kids?.length ?? 0) > 0;
-    if (match || kidMatch) return { ...node, children: kids };
-    return null;
-  };
-  return nodes.map(filter).filter(Boolean) as TreeNode[];
 }

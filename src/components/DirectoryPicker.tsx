@@ -3,6 +3,7 @@ interface DirectoryPickerProps {
   onError: (error: string) => void;
   selectedPath?: string;
   isLoading?: boolean;
+  label?: string;
 }
 
 export function DirectoryPicker({
@@ -10,34 +11,28 @@ export function DirectoryPicker({
   onError,
   selectedPath,
   isLoading,
+  label = 'Select directory',
 }: DirectoryPickerProps) {
   const handlePickDirectory = async () => {
     try {
-      const dirHandle = await (window as any).showDirectoryPicker();
-      onDirectorySelected(dirHandle);
+      const handle = await window.showDirectoryPicker();
+      onDirectorySelected(handle);
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        return; // User cancelled
-      }
-      onError(error instanceof Error ? error.message : 'Failed to select directory');
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      onError(
+        error instanceof Error
+          ? error.message
+          : 'Directory picker unavailable — use a listing file instead',
+      );
     }
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <button
-        onClick={handlePickDirectory}
-        disabled={isLoading}
-        className="px-4 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-lg font-medium shadow-sm hover:shadow-md hover:from-indigo-700 hover:to-blue-700 disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none disabled:cursor-not-allowed transition-all duration-200"
-      >
-        {isLoading ? 'Scanning...' : 'Select Directory'}
+    <>
+      <button type="button" className="step-btn" onClick={handlePickDirectory} disabled={isLoading}>
+        {label}
       </button>
-      {selectedPath && (
-        <div className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
-          <span className="text-lg">📁</span>
-          <span className="truncate">{selectedPath}</span>
-        </div>
-      )}
-    </div>
+      {selectedPath && <span className="step-dirname" title={selectedPath}>📁 {selectedPath}</span>}
+    </>
   );
 }

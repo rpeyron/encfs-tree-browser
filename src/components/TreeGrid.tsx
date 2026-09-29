@@ -4,7 +4,7 @@ import type React from 'react';
 
 interface TreeGridProps {
   nodes: TreeNode[];
-  mode: 'encoded' | 'decoded';
+  primary: 'encoded' | 'decoded';
   expanded: Record<string, boolean>;
   loading: Record<string, boolean>;
   onToggleNode: (nodeId: string) => void;
@@ -12,7 +12,7 @@ interface TreeGridProps {
 
 const INDENT_PER_LEVEL = 16;
 
-export function TreeGrid({ nodes, mode, expanded, loading, onToggleNode }: TreeGridProps) {
+export function TreeGrid({ nodes, primary, expanded, loading, onToggleNode }: TreeGridProps) {
   const { copyToClipboard } = useClipboard();
 
   const renderNode = (node: TreeNode, depth: number): React.ReactNode => {
@@ -21,8 +21,8 @@ export function TreeGrid({ nodes, mode, expanded, loading, onToggleNode }: TreeG
     const canExpand = node.isDir;
     const childrenLoaded = node.children && node.children.length > 0;
     const icon = canExpand ? (isExpanded ? '📂' : '📁') : '📄';
-    const name = mode === 'encoded' ? node.nameDecoded : node.nameEncoded;
-    const alternate = mode === 'encoded' ? node.nameEncoded : node.nameDecoded;
+    const name = primary === 'encoded' ? node.nameDecoded : node.nameEncoded;
+    const alternate = primary === 'encoded' ? node.nameEncoded : node.nameDecoded;
     const indent = depth * INDENT_PER_LEVEL;
 
     return (
@@ -58,8 +58,8 @@ export function TreeGrid({ nodes, mode, expanded, loading, onToggleNode }: TreeG
             )}
           </div>
           <div className="tree-node-copy">
-            <button onClick={() => copyToClipboard(node.pathEncoded)} className="tree-node-copy-btn copy-encoded" title="Copy encoded path">📋E</button>
-            <button onClick={() => copyToClipboard(node.pathDecoded)} className="tree-node-copy-btn copy-decoded" title="Copy decoded path">📋D</button>
+            <button onClick={() => copyToClipboard(node.pathEncoded)} className="tree-node-copy-btn copy-encoded" title="Copy encoded path">📋🔒</button>
+            <button onClick={() => copyToClipboard(node.pathDecoded)} className="tree-node-copy-btn copy-decoded" title="Copy decoded path">📋🔓</button>
           </div>
         </div>
         {isExpanded && (

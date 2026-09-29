@@ -10,7 +10,12 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dist-standalone
 *.local
+
+# Dropped EncFS configs (local, never commit)
+conf/
+
 
 # Editor directories and files
 .vscode/*

@@ -16,9 +16,13 @@ directory trees (File System Access API) and shows encoded ↔ decoded filenames
 
 - **No crypto in this app**: filename crypto comes only from `encfs-filename-codec`
   (`file:../encfs-names-ts`). Rebuild that package after editing it: `cd ../encfs-names-ts && npm run build`
-- **Password**: memory only — passed straight to `EncfsNameCodec.fromV6Xml`, never persisted or logged
+- **Password**: memory only by default — passed straight to `EncfsNameCodec.fromV6Xml`,
+  never logged; persistence only via the per-config "Remember" opt-in (cleartext localStorage)
 - **Plain CSS** in `src/styles/app.css`; no Tailwind or utility frameworks
-- **Chrome/Edge only** (File System Access API) — no fallback
+- **Directory browsing** needs the File System Access API (Chrome/Edge) — the Browse tab
+  is hidden elsewhere; list conversions work everywhere via the Convert tab
+- **Directory ≠ config**: the directory binding (mount point, mode, source) is separate from the
+  EncFS configuration entity (xml + password); one directory per configuration
 - **TypeScript strict, no `any`**; compact code, comments only for non-obvious WHY
 - One failed name conversion must never fail the whole scan (keep the raw name)
 
@@ -26,10 +30,11 @@ directory trees (File System Access API) and shows encoded ↔ decoded filenames
 
 ```bash
 npm install
-npm run dev          # http://localhost:5173
-npm run test         # Vitest (must pass: tests/lib/tree-builder.test.ts)
+npm run dev            # http://localhost:5173
+npm run test           # Vitest (must pass: tests/lib/*)
 npm run type-check
-npm run build        # tsc -b && vite build
+npm run build          # tsc -b && vite build
+npm run build:standalone  # single self-contained dist-standalone/index.html
 ```
 
 Before committing: `npm run test`, `npm run type-check`, `npm run build`, then a manual
