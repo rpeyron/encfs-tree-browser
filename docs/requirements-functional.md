@@ -9,18 +9,27 @@ Technical constraints, architecture and code style live in [requirements-technic
 ## Core Features
 
 ### 1. Configuration & Setup
-- **Header configuration cluster**: a dropdown in the app header lists user configs
-  saved in localStorage first, then bundled sample configs (hardcoded in
-  `src/lib/builtin-configs.ts`, password `test`), and finally a special
+- **Header order**: logo, then the **configuration cluster** (dropdown, edit button,
+  password), then the tabs **⚡ Convert | 🌳 Browse**, then — on Browse — the directory
+  line. All controls share a uniform 30 px height; the header **wraps responsively**
+  on narrow screens instead of overflowing
+- **Header configuration cluster**: the cluster sits **before the tabs**; its dropdown
+  lists user configs saved in localStorage first, then configs dropped in `conf/`
+  (gitignored, auto-registered as built-ins named after the file), then the bundled
+  sample fixtures (password `test`), and finally a special
   **"➕ Add configuration…"** entry that opens the add modal. Each configuration holds
   **one `.encfs6.xml` + one password** (crypto only)
+- **First run**: the dropdown shows the placeholder **"Select or add configuration…"**
+  and the password field is disabled; on later launches the **last used configuration**
+  is restored (deleting it returns to the placeholder)
 - **Add config**: selecting the "Add…" dropdown entry opens a **modal** (name + upload
   `.encfs6.xml` + **Remember password** checkbox) saved to localStorage
 - **Edit/Delete config**: the button right beside the dropdown opens the same modal for
   the active config (rename, replace xml, Remember, delete) — enabled for user configs
   only; samples show a lock 🔒 (read-only; duplicating into a user config is possible
   via "Add configuration…")
-- **Password entry**: input beside the dropdown; default is memory-only. The modal's
+- **Password entry**: input beside the dropdown (disabled until a config is selected);
+  default is memory-only. The modal's
   opt-in **"Remember password" checkbox** stores the password in cleartext in
   localStorage for that configuration; unchecking strips it on the next save
 - **Single directory** (Browse tab, shown only when the browser supports the File

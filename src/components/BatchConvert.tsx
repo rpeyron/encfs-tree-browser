@@ -63,6 +63,7 @@ export function BatchConvert({
         }),
       );
     } catch (err) {
+      console.error('[convert]', err);
       setRows([]);
       setPairs([]);
       setError(err instanceof Error ? err.message : 'Conversion failed');

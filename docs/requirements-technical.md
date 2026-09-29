@@ -1,12 +1,12 @@
 # EncFS Tree Browser — Technical Requirements
 
 Functional requirements and user flows: [requirements-functional.md](requirements-functional.md).
-Usage, npm-package wiring and build instructions: [../README.md](../README.md).
+Usage and build commands: [../README.md](../README.md) (codec wiring and architecture: below).
 
 ## Architecture
 
-- **File System Access API**: browser native, no server, Chrome/Edge for directory
-  browsing; browsers without it still work via the listing-file fallback and batch convert
+- **File System Access API**: browser native, no server; the Browse tab (directory
+  scanning) requires Chrome/Edge, other browsers keep the Convert tab only
 - **Tree grid**: plain recursive rows in `TreeGrid.tsx` — lazy expansion keeps the DOM small;
   virtualisation is a future enhancement, not current behaviour
 - **Single directory browsing**: a configuration (xml + password) is separate from its
@@ -28,32 +28,33 @@ Usage, npm-package wiring and build instructions: [../README.md](../README.md).
 
 **EncFS Logic** — external package `encfs-filename-codec` (`../encfs-names-ts/src/index.ts`):
 - `.encfs6.xml` parsing, volume key derivation, Block/Stream name ciphers, EncFS base64,
-  chained name IVs. The app never parses the config itself
+  chained name IVs. The app never parses the config itself — the package uses the
+  browser's native `DOMParser` (with a small internal fallback parser for Node/tests),
+  so no XML library ships in the bundle
 
 **Configuration & state:**
 - `src/lib/config-store.ts` — user configs / active id / steps / prefs in localStorage,
   password sanitizing, legacy-key migration
-- `src/lib/builtin-configs.ts` — bundled sample configs (`?raw` xml imports)
+- `src/lib/builtin-configs.ts` — sample configs (`?raw` imports) + `conf/*.encfs6.xml`
+  glob (drop-in built-ins, gitignored)
 
 **Tree building / scanning:**
-- `src/lib/tree-builder.ts` — tree construction (FSA levels + eager listing trees),
-  chained-IV conversion, full path mapping
-- `src/lib/chain.ts` — step grafting at mount points, id prefixing, path conversion helpers
-- `src/lib/listing-parser.ts` — directory listing file parser (format spec)
+- `src/lib/tree-builder.ts` — tree construction from FSA scans, chained-IV conversion,
+  full path mapping
+- `src/lib/chain.ts` — directory grafting at mount points, id prefixing, path conversion
 - `src/lib/fs-scanner.ts` — File System Access API wrapper (one directory level)
 
 **Persistence:**
-- `src/lib/persist-dir.ts` — save/load directory handles via IndexedDB (keyed per step)
+- `src/lib/persist-dir.ts` — save/load directory handles via IndexedDB (keyed per directory)
 
 **UI components** (`src/components/`):
 - `TreeGrid.tsx` — tree rendering (expand/collapse, copy buttons, lazy children)
-- `ConfigManager.tsx` — config dropdown, password + Remember, add/replace/delete config
-- `ChainBindings.tsx` — (removed) directory bindings now live in `DirectorySetup.tsx`
-- `DirectorySetup.tsx` — single directory bar (source, mode, mount point) in the Tree tab
-- `ConfigModal.tsx` — add/edit/delete configuration modal
-- `BatchConvert.tsx` — batch encode/decode (table/tree views)
-- `ConfigUploader.tsx`, `DirectoryPicker.tsx`, `DirectoryListingUpload.tsx`,
-  `SearchBar.tsx` — supporting inputs
+- `TreeToolbar.tsx` — shared toolbar (search, sort, expand, swap) for both tabs
+- `DirectorySetup.tsx` — directory line in the header (Select directory, mode,
+  mount point shown only for chainedNameIV configs)
+- `ConfigModal.tsx` — add/edit/delete configuration modal (incl. Remember password)
+- `BatchConvert.tsx` — Convert tab (table view + same tree as Browse)
+- `ConfigUploader.tsx`, `DirectoryPicker.tsx`, `SearchBar.tsx` — supporting inputs
 
 **Styling:**
 - `src/styles/app.css` — all application styling
@@ -63,7 +64,8 @@ Usage, npm-package wiring and build instructions: [../README.md](../README.md).
 - `tests/lib/tree-builder.test.ts` — chained-IV conversion + package wiring (MUST PASS)
 - `tests/lib/chain.test.ts` — grafting, id helpers, path conversion
 - `tests/lib/config-store.test.ts` — store round-trips, password sanitizing, migration
-- `tests/lib/listing-parser.test.ts` — listing parsing + eager tree vs fixture vectors
+- `tests/lib/tree-filter.test.ts` — search matching both representations, sort by
+  displayed primary name
 - `tests/fixtures/encfs-real-test-vectors.json` — real EncFS 1.9.5 encoded/decoded pairs
 
 ## EncFS Integration (delegated to `encfs-filename-codec`)
@@ -75,6 +77,23 @@ Usage, npm-package wiring and build instructions: [../README.md](../README.md).
 - The package throws `EncfsCodecError`; the app catches it and keeps the raw name so one
   bad name never fails the scan
 - Algorithm/format details: `../encfs-names-ts/README.md` and `encfs-algo.md`
+
+**Wiring between app and package:**
+
+- Dependency (`package.json`): `"encfs-filename-codec": "file:../encfs-names-ts"` — npm
+  creates a junction to the package; its `prepare` script builds `dist/`, which is what
+  the app imports (`exports` → `./dist/src/index.js` + `.d.ts`)
+- Import points:
+
+| Where | Call | Purpose |
+|-------|------|---------|
+| `src/App.tsx` | `EncfsNameCodec.fromV6Xml(xml, password)` | Parse `.encfs6.xml`, derive the volume key, build the codec |
+| `src/lib/tree-builder.ts` | `codec.decryptName(component, parentIv)` | Encoded → decoded name of one path component |
+| `src/lib/tree-builder.ts` | `codec.encryptName(component, parentIv)` | Decoded → encoded name of one path component |
+| `src/lib/tree-builder.ts` | `codec.chainedNameIv` | Whether children's names chain their parent's IV |
+
+- After editing the package: `cd ../encfs-names-ts && npm run build`, then restart the
+  dev server / rerun tests (the link already points at the source tree — no reinstall)
 
 ## File Structure
 
@@ -121,9 +140,11 @@ docs/                  # This file + functional requirements
 
 - **Unit tests**: `tests/lib/` — tree-builder (chained-IV conversion in both modes,
   raw-name fallback, package wiring), chain (grafting, path conversion), config-store
-  (round-trips, password sanitizing, legacy migration), listing-parser (format + eager tree)
-- **Crypto algorithm tests**: `../encfs-names-ts` (`npm test` there)
-- **Not yet covered**: component/UI tests (`@testing-library` deliberately not installed)
+  (round-trips, password sanitizing, legacy migration), tree-filter (search on both
+  representations, sort by displayed primary name)
+- **Crypto algorithm tests**: `../encfs-names-ts` (`npm test` there) — real encrypted
+  trees + Rust golden vectors
+- **Not yet covered**: component/UI tests (no browser-test framework installed)
 
 ## Error Handling
 
@@ -136,13 +157,10 @@ docs/                  # This file + functional requirements
 
 | Browser | Support | Notes |
 |---------|---------|-------|
-| Chrome 90+ | Full | File System Access API for directory browsing |
-| Edge 90+ | Full | File System Access API for directory browsing |
-| Firefox | Partial | Listing-file fallback + batch convert; no directory picker |
-| Safari | Partial | Listing-file fallback + batch convert; no directory picker |
-
-Browsers without the File System Access API cannot open a directory directly; they work
-through the uploaded listing format (see `src/lib/listing-parser.ts`).
+| Chrome 90+ | Full | Browse + Convert (File System Access API) |
+| Edge 90+ | Full | Browse + Convert (File System Access API) |
+| Firefox | Convert only | No File System Access API → Browse tab hidden |
+| Safari | Convert only | No File System Access API → Browse tab hidden |
 
 ## Security
 
@@ -162,8 +180,8 @@ through the uploaded listing format (see `src/lib/listing-parser.ts`).
 
 ## Important Constraints
 
-1. **Directory browsing** needs the File System Access API (Chrome/Edge); elsewhere use
-   the listing fallback
+1. **Directory browsing** needs the File System Access API (Chrome/Edge); elsewhere
+   the Browse tab is hidden and only the Convert tab is available
 2. **Password handling**: memory only by default; persistence requires explicit opt-in
 3. **Large trees**: must support 10,000+ items with smooth scrolling/expand
 4. **Mode detection**: user specifies encoded/decoded, don't guess
@@ -184,14 +202,15 @@ through the uploaded listing format (see `src/lib/listing-parser.ts`).
 - `npm run build:standalone` → `dist-standalone/encfs-browser.html` (single self-contained file,
   via `vite-plugin-singlefile` in `vite.config.ts` mode `standalone`; sample xml configs
   are inlined through `?raw` imports)
-- Sizes (gzip): JS ≈ 123 KB (42 KB), CSS ≈ 18 KB (4 KB), standalone ≈ 140 KB (46 KB) —
-  Preact runtime + dead-CSS removal cut the previous bundle by more than half
+- Sizes (gzip): JS ≈ 62 KB (22 KB), CSS ≈ 18 KB (3,7 KB), standalone ≈ 80 KB (25,4 KB).
+  Levers already applied: Preact runtime via alias, dead-CSS removal, native `DOMParser`
+  (no XML library), `removeViteModuleLoader`, target es2022
 
 ## Future Enhancements
 
 1. ✅ Config persistence (localStorage + IndexedDB dir handles)
 2. ✅ Batch encode/decode (table + tree views)
-3. ✅ Single-directory browse with bundled sample listings
+3. ✅ Single-directory browse with sample path lists for Convert
 4. ✅ Standalone single-file build
 5. Drag & drop file upload
 6. Auto-detect mode
