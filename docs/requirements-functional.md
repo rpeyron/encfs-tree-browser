@@ -161,7 +161,7 @@ Technical constraints, architecture and code style live in [requirements-technic
 
 ### 9. Standalone Single-File Build
 - `npm run build:standalone` bundles the whole app (JS, CSS, sample `.encfs6.xml`
-  configs) into one self-contained `dist-standalone/index.html`
+  configs) into one self-contained `dist-standalone/encfs-browser.html`
 - Runs offline from disk (`file://`), no server required
 
 ## User Flows

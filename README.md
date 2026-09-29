@@ -49,8 +49,21 @@ Opens dev server at `http://localhost:5173`
 
 ```bash
 npm run build              # dist/ (multi-file)
-npm run build:standalone   # dist-standalone/index.html (single file, offline)
+npm run build:standalone   # dist-standalone/encfs-browser.html (single file, offline)
 ```
+
+### Embedding an .encfs6.xml in the standalone build
+
+The standalone HTML ships with whatever configurations existed **at build time**:
+
+1. Drop your volume config in `conf/xxxx.encfs6.xml` (the `conf/` folder is gitignored)
+2. Run `npm run build:standalone`
+3. `dist-standalone/encfs-browser.html` now contains `xxxx` in its configuration
+   dropdown — the XML is inlined, no network needed
+
+Alternatively, open the standalone file and use **➕ Add configuration…** in the
+dropdown: the config is then stored in that browser's localStorage for the `file://`
+origin (per machine, not embedded in the HTML).
 
 ### Testing
 
@@ -62,10 +75,13 @@ npm run test:ui       # Open test UI
 ## Usage
 
 ### Header
-- **Configuration dropdown**: your configs first, bundled samples last, then "➕ Add
-  configuration…" which opens the modal; **✏️ Edit** sits right beside the dropdown
-  (user configs only) and holds rename / replace xml / **Remember password** / delete
-- **Password**: input beside the dropdown (memory only unless Remember is saved)
+- **Configuration cluster** (before the tabs): dropdown first — shows the last used
+  configuration on reopening, or **"Select or add configuration…"** the very first
+  time; **✏️ Edit / 🔒** sits right beside it, then the password field
+- **➕ Add configuration…** (last dropdown entry) opens the modal: name, xml,
+  **Remember password**, and delete for user configs
+- Tabs **⚡ Convert | 🌳 Browse** follow; on Browse, the directory line
+  (Select directory… / mode / mount point / Scan) sits to their right
 
 ### Convert tab (first)
 - Paste names/paths (one per line), load a file, or click **📄 Sample list** with a

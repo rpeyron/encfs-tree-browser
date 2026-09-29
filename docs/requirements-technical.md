@@ -179,7 +179,7 @@ through the uploaded listing format (see `src/lib/listing-parser.ts`).
 ## Build
 
 - `npm run build` → `dist/` (normal multi-file build)
-- `npm run build:standalone` → `dist-standalone/index.html` (single self-contained file,
+- `npm run build:standalone` → `dist-standalone/encfs-browser.html` (single self-contained file,
   via `vite-plugin-singlefile` in `vite.config.ts` mode `standalone`; sample xml configs
   are inlined through `?raw` imports)
 

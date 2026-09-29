@@ -39,12 +39,13 @@ body {
 .app-header {
   background: linear-gradient(to right, var(--color-indigo-600), var(--color-blue-600));
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  padding: 6px 24px;
+  padding: 7px 16px;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
-  gap: 16px;
-  min-height: 40px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-height: 44px;
   flex-shrink: 0;
 }
 
@@ -755,21 +756,21 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .config-cluster .config-select {
   min-width: 170px;
   max-width: 200px;
-  padding: 6px 8px;
+  padding: 7px 9px;
   font-size: 0.8rem;
   border-radius: 6px;
 }
 
 .config-cluster .config-password {
   min-width: 0;
-  width: 130px;
-  padding: 6px 9px;
+  width: 140px;
+  padding: 7px 9px;
   font-size: 0.8rem;
   border-radius: 6px;
 }
@@ -780,26 +781,27 @@ body {
 }
 
 .icon-btn {
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.34);
   border-radius: 6px;
   width: 30px;
   height: 30px;
   font-size: 0.9rem;
+  color: var(--color-white);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, opacity 0.15s;
+  transition: background 0.15s, border-color 0.15s;
   padding: 0;
 }
 
 .icon-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.55);
 }
 
 .icon-btn:disabled {
-  opacity: 0.35;
   cursor: not-allowed;
 }
 
@@ -1463,30 +1465,66 @@ body {
 
 .header-dir .step-dirname {
   color: var(--color-white);
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 6px;
-  padding: 4px 8px;
-  max-width: 120px;
+  padding: 5px 9px;
+  font-size: 0.8rem;
+  max-width: 130px;
 }
 
 .header-dir .scan-button {
   width: auto;
   padding: 7px 16px;
   font-size: 0.85rem;
+  font-weight: 600;
   border-radius: 6px;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: var(--color-white);
+}
+
+.header-dir .scan-button:hover:not(:disabled) {
+  background: #1e293b;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
 .header-dir .scan-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  background: var(--color-slate-400);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: var(--color-white);
+  opacity: 0.9;
   box-shadow: none;
 }
 
-/* Locked (sample) configuration: quiet ghost, no muddy overlay */
+/* Unified header controls on the indigo bar */
+.header-dir .step-btn,
+.header-dir .step-select,
+.header-dir .step-mount,
+.config-cluster .config-select,
+.config-cluster .config-password {
+  background-color: var(--color-surface);
+  color: var(--color-slate-800);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.header-dir .step-btn:hover:not(:disabled),
+.header-dir .step-select:hover:not(:disabled),
+.config-cluster .config-select:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.75);
+  background-color: var(--color-slate-50);
+}
+
+.config-cluster .config-password::placeholder {
+  color: var(--color-slate-500);
+  opacity: 1;
+}
+
+/* Locked (sample) configuration: quiet but deliberate */
 .config-cluster .icon-btn:disabled {
-  opacity: 0.5;
-  background: transparent;
-  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .app-display {
@@ -1620,6 +1658,22 @@ body {
     color: #f87171;
   }
 
+  /* Scan stays the primary action: inverted for contrast on the dark header */
+  .header-dir .scan-button {
+    background: var(--color-white);
+    color: #0f172a;
+    border-color: rgba(255, 255, 255, 0.55);
+  }
+
+  .header-dir .scan-button:hover:not(:disabled) {
+    background: #e2e8f0;
+  }
+
+  .header-dir .scan-button:disabled {
+    background: var(--color-slate-400);
+    color: var(--color-white);
+  }
+
   .batch-table .row-error td:last-child {
     color: #f87171;
   }
@@ -1636,5 +1690,52 @@ body {
     color-scheme: dark;
   }
 }
+
+/* Uniform control height across the header (light + dark) */
+.app-tab,
+.config-cluster .config-select,
+.config-cluster .config-password,
+.config-cluster .icon-btn,
+.header-dir .step-btn,
+.header-dir .step-select,
+.header-dir .step-mount,
+.header-dir .scan-button,
+.header-dir .step-dirname {
+  height: 30px;
+  box-sizing: border-box;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.app-tab {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.config-cluster .config-select,
+.config-cluster .config-password {
+  padding-left: 9px;
+  padding-right: 9px;
+}
+
+.header-dir .step-btn,
+.header-dir .step-select,
+.header-dir .step-mount {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.header-dir .scan-button {
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+.header-dir .step-dirname {
+  display: inline-flex;
+  align-items: center;
+  padding-left: 9px;
+  padding-right: 9px;
+}
+
 
 

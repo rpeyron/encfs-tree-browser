@@ -83,9 +83,7 @@ export function App() {
     ...BUILTIN_CONFIGS,
     ...loadConfigs(),
   ]);
-  const [activeId, setActiveId] = useState<string>(
-    () => loadActiveId() ?? BUILTIN_CONFIGS[0].id,
-  );
+  const [activeId, setActiveId] = useState<string>(() => loadActiveId() ?? '');
   const activeConfig = configs.find((c) => c.id === activeId) ?? null;
 
   const [password, setPassword] = useState('');
@@ -183,6 +181,7 @@ export function App() {
   };
 
   const handleSelectConfig = (id: string) => {
+    if (!id) return;
     saveActiveId(id);
     setActiveId(id);
     setNodes([]);
@@ -224,9 +223,7 @@ export function App() {
   const handleDeleteConfig = (id: string) => {
     deleteConfig(id);
     setConfigs((prev) => prev.filter((c) => c.id !== id));
-    const fallback = BUILTIN_CONFIGS[0].id;
-    saveActiveId(fallback);
-    setActiveId(fallback);
+    setActiveId('');
     setModal(null);
   };
 
@@ -352,6 +349,54 @@ export function App() {
           <h1>EncFS</h1>
           <span>Tree Browser</span>
         </div>
+        <div className="config-cluster">
+          <select
+            className="config-select"
+            value={activeConfig?.id ?? ''}
+            onChange={(e) => {
+              if (e.target.value === '__add__') setModal('add');
+              else handleSelectConfig(e.target.value);
+            }}
+            title="Active configuration"
+          >
+            <option value="" disabled hidden>
+              Select or add configuration…
+            </option>
+            {[
+              ...configs.filter((c) => c.source === 'user'),
+              ...configs.filter((c) => c.source === 'builtin'),
+            ].map((cfg) => (
+              <option key={cfg.id} value={cfg.id}>
+                {cfg.name}
+                {cfg.source === 'builtin' ? ' (sample)' : ''}
+              </option>
+            ))}
+            <option value="__add__">➕ Add configuration…</option>
+          </select>
+          <button
+            className="icon-btn"
+            title={
+              activeConfig?.source === 'user'
+                ? 'Edit configuration'
+                : activeConfig
+                  ? 'Sample configs are read-only'
+                  : 'Select a configuration first'
+            }
+            disabled={activeConfig?.source !== 'user'}
+            onClick={() => setModal('edit')}
+          >
+            {activeConfig?.source === 'user' ? '✏️' : '🔒'}
+          </button>
+          <input
+            type="password"
+            className="config-password"
+            placeholder="🔑 Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={!activeConfig}
+            title="EncFS password for the selected configuration"
+          />
+        </div>
         <nav className="app-tabs">
           <button
             className={`app-tab${view === 'convert' ? ' app-tab-active' : ''}`}
@@ -389,48 +434,6 @@ export function App() {
             </button>
           </div>
         )}
-        <div className="config-cluster">
-          <select
-            className="config-select"
-            value={activeConfig?.id ?? ''}
-            onChange={(e) => {
-              if (e.target.value === '__add__') setModal('add');
-              else handleSelectConfig(e.target.value);
-            }}
-            title="Active configuration"
-          >
-            {[
-              ...configs.filter((c) => c.source === 'user'),
-              ...configs.filter((c) => c.source === 'builtin'),
-            ].map((cfg) => (
-              <option key={cfg.id} value={cfg.id}>
-                {cfg.name}
-                {cfg.source === 'builtin' ? ' (sample)' : ''}
-              </option>
-            ))}
-            <option value="__add__">➕ Add configuration…</option>
-          </select>
-          <button
-            className="icon-btn"
-            title={
-              activeConfig?.source === 'user'
-                ? 'Edit configuration'
-                : 'Sample configs are read-only'
-            }
-            disabled={activeConfig?.source !== 'user'}
-            onClick={() => setModal('edit')}
-          >
-            {activeConfig?.source === 'user' ? '✏️' : '🔒'}
-          </button>
-          <input
-            type="password"
-            className="config-password"
-            placeholder="🔑 Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            title="EncFS password for the selected configuration"
-          />
-        </div>
       </header>
 
       <main className="app-main">
@@ -462,7 +465,7 @@ export function App() {
                   <div className="tree-grid-empty-icon">🔒</div>
                   <p>No tree loaded yet</p>
                   <p className="tree-grid-empty-hint">
-                    Pick an EncFS directory above and hit Scan — or convert name lists in the Convert tab
+                    Select a configuration in the header, pick a directory and hit Scan — or convert name lists in the Convert tab
                   </p>
                 </div>
               </div>

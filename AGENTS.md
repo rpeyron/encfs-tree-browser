@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 npm run test           # Vitest (must pass: tests/lib/*)
 npm run type-check
 npm run build          # tsc -b && vite build
-npm run build:standalone  # single self-contained dist-standalone/index.html
+npm run build:standalone  # single self-contained dist-standalone/encfs-browser.html
 ```
 
 Before committing: `npm run test`, `npm run type-check`, `npm run build`, then a manual
