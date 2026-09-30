@@ -9,7 +9,8 @@ import { EncfsNameCodec } from 'encfs-filename-codec';
 import { scanDirectory } from './lib/fs-scanner';
 import { buildTreeLevel, buildFullPaths, findNodeById } from './lib/tree-builder';
 import { graftSteps, prefixIds, relPathOf, normalizeMount } from './lib/chain';
-import { filterNodes, sortTree } from './lib/tree-filter';
+import { filterNodes, sortTree, flattenVisible } from './lib/tree-filter';
+import { detectNameMode } from './lib/mode-detect';
 import { BUILTIN_CONFIGS, BUILTIN_SAMPLES, defaultStepFor } from './lib/builtin-configs';
 import { hasChainedNameIv } from './lib/encfs-xml';
 import {
@@ -101,6 +102,7 @@ export function App() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [primary, setPrimary] = useState<NameMode>(
     () => loadPrefs().displayPrimary ?? 'encoded',
   );
@@ -161,6 +163,27 @@ export function App() {
     if (activeId) saveSteps(activeId, [next]);
   };
 
+  const applyDetectedMode = (stepId: string, mode: NameMode) => {
+    setStep((prev) => {
+      if (!prev || prev.id !== stepId) return prev;
+      const next = { ...prev, mode };
+      if (activeId) saveSteps(activeId, [next]);
+      return next;
+    });
+  };
+
+  /** Detect the mode over the directory root after a pick; silent when codec/password unavailable. */
+  const detectModeFor = async (handle: FileSystemDirectoryHandle, stepId: string) => {
+    try {
+      const c = await ensureCodec();
+      const entries = await scanDirectory(handle);
+      const mode = await detectNameMode(c, entries.map((e) => e.name));
+      if (mode) applyDetectedMode(stepId, mode);
+    } catch {
+      // no codec/password yet — keep the current mode, user picks manually
+    }
+  };
+
   const handleDirectoryPicked = (handle: FileSystemDirectoryHandle) => {
     if (!step) return;
     fsaHandleRef.current = handle;
@@ -170,6 +193,7 @@ export function App() {
     if (activeId) {
       void saveDirHandle(handle, dirHandleKey(activeId, step.id)).catch(() => {});
     }
+    void detectModeFor(handle, step.id);
   };
 
   const resolveHandle = async (): Promise<FileSystemDirectoryHandle | null> => {
@@ -339,6 +363,113 @@ export function App() {
   const filteredNodes = search ? filterNodes(nodes, search, primary) : nodes;
   const visibleNodes = sortNames ? sortTree(filteredNodes, primary) : filteredNodes;
   const canScan = Boolean(activeConfig && password && step?.dirName && !scanning);
+
+  // Keyboard navigation — kept in a ref so the listener attaches once per view.
+  const kbRef = useRef({ visibleNodes, expanded, selectedId, primary, search, onToggleNode: (_id: string) => {}, setSelectedId });
+  kbRef.current = {
+    visibleNodes,
+    expanded,
+    selectedId,
+    primary,
+    search,
+    onToggleNode,
+    setSelectedId,
+  };
+
+  useEffect(() => {
+    if (view !== 'browse') return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const kb = kbRef.current;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      const mod = event.ctrlKey || event.metaKey;
+
+      if (mod && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        document.querySelector<HTMLInputElement>('.tree-toolbar .search-input')?.focus();
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        kb.setSelectedId(null);
+        if (kb.search) setSearch('');
+        if (tag === 'INPUT') (target as HTMLInputElement).blur();
+        return;
+      }
+      if (typing || kb.visibleNodes.length === 0) return;
+
+      if (mod && event.key.toLowerCase() === 'c') {
+        if (!kb.selectedId) return;
+        const node = findNodeById(kb.visibleNodes, kb.selectedId);
+        if (node) {
+          event.preventDefault();
+          void navigator.clipboard.writeText(kb.primary === 'encoded' ? node.pathDecoded : node.pathEncoded);
+        }
+        return;
+      }
+
+      const flat = flattenVisible(kb.visibleNodes, kb.expanded);
+      const idx = flat.findIndex((n) => n.id === kb.selectedId);
+      const focusRow = (id: string) => {
+        kb.setSelectedId(id);
+        requestAnimationFrame(() => {
+          document
+            .querySelector(`[data-node-id="${id}"]`)
+            ?.scrollIntoView({ block: 'nearest' });
+        });
+      };
+
+      switch (event.key) {
+        case 'ArrowDown': {
+          event.preventDefault();
+          const next = idx < 0 ? flat[0] : flat[Math.min(idx + 1, flat.length - 1)];
+          if (next) focusRow(next.id);
+          break;
+        }
+        case 'ArrowUp': {
+          event.preventDefault();
+          if (idx > 0) focusRow(flat[idx - 1].id);
+          break;
+        }
+        case 'ArrowRight': {
+          if (idx < 0) {
+            if (flat[0]) focusRow(flat[0].id);
+            break;
+          }
+          const node = flat[idx];
+          event.preventDefault();
+          if (node.isDir && !kb.expanded[node.id]) kb.onToggleNode(node.id);
+          else if (node.isDir && node.children?.[0]) focusRow(node.children[0].id);
+          break;
+        }
+        case 'ArrowLeft': {
+          if (idx < 0) break;
+          event.preventDefault();
+          const node = flat[idx];
+          if (node.isDir && kb.expanded[node.id]) kb.onToggleNode(node.id);
+          else {
+            const parentId = node.id.slice(0, node.id.lastIndexOf('/'));
+            if (parentId.includes(':') && parentId !== node.id) focusRow(parentId);
+          }
+          break;
+        }
+        case 'Enter':
+        case ' ': {
+          if (tag === 'BUTTON' || idx < 0) return;
+          const node = flat[idx];
+          if (node.isDir) {
+            event.preventDefault();
+            kb.onToggleNode(node.id);
+          }
+          break;
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
   const chained = activeConfig ? hasChainedNameIv(activeConfig.xml) : false;
   const sampleList = activeConfig ? BUILTIN_SAMPLES[activeConfig.id] : undefined;
 
@@ -483,6 +614,7 @@ export function App() {
                   onExpandOne={() => void expandOneLevel()}
                   onExpandAll={() => void expandAll()}
                   onCollapse={collapseAll}
+                  exportNodes={nodes}
                 />
                 <div className="display-content">
                   <TreeGrid
@@ -490,6 +622,8 @@ export function App() {
                     primary={primary}
                     expanded={expanded}
                     loading={loading}
+                    selectedId={selectedId}
+                    onSelect={setSelectedId}
                     onToggleNode={onToggleNode}
                   />
                 </div>

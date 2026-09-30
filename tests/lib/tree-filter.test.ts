@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterNodes, sortTree, displayPrimaryName } from '../../src/lib/tree-filter';
+import { filterNodes, sortTree, displayPrimaryName, flattenVisible } from '../../src/lib/tree-filter';
 import type { TreeNode } from '../../src/types/index';
 
 const node = (nameDecoded: string, nameEncoded: string, children?: TreeNode[]): TreeNode => ({
@@ -52,5 +52,22 @@ describe('sortTree', () => {
     const n = node('plain', 'cipher');
     expect(displayPrimaryName(n, 'encoded')).toBe('plain');
     expect(displayPrimaryName(n, 'decoded')).toBe('cipher');
+  });
+});
+
+describe('flattenVisible', () => {
+  it('returns rows in display order, children only when expanded', () => {
+    const tree = [
+      node('a', 'ea', [node('a/1', 'e1'), node('a/2', 'e2')]),
+      node('b', 'eb'),
+    ];
+
+    expect(flattenVisible(tree, {}).map((n) => n.nameDecoded)).toEqual(['a', 'b']);
+    expect(flattenVisible(tree, { [tree[0].id]: true }).map((n) => n.nameDecoded)).toEqual([
+      'a',
+      'a/1',
+      'a/2',
+      'b',
+    ]);
   });
 });

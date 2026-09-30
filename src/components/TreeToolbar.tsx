@@ -1,5 +1,6 @@
-import type { NameMode } from '../types/index';
+import type { NameMode, TreeNode } from '../types/index';
 import { SearchBar } from './SearchBar';
+import { downloadFile, flattenTree, toJsonTree, toCsv } from '../lib/export';
 
 interface TreeToolbarProps {
   total: number;
@@ -13,6 +14,8 @@ interface TreeToolbarProps {
   onExpandOne: () => void;
   onExpandAll: () => void;
   onCollapse: () => void;
+  /** Full loaded tree for CSV/JSON export (not affected by search). */
+  exportNodes: TreeNode[];
 }
 
 export function TreeToolbar({
@@ -27,7 +30,21 @@ export function TreeToolbar({
   onExpandOne,
   onExpandAll,
   onCollapse,
+  exportNodes,
 }: TreeToolbarProps) {
+  const stamp = () => new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+
+  const exportCsv = () => {
+    downloadFile(`encfs-tree-${stamp()}.csv`, toCsv(flattenTree(exportNodes)), 'text/csv');
+  };
+  const exportJson = () => {
+    downloadFile(
+      `encfs-tree-${stamp()}.json`,
+      JSON.stringify(toJsonTree(exportNodes), null, 2),
+      'application/json',
+    );
+  };
+
   return (
     <div className="tree-toolbar">
       <span className="tree-toolbar-stats">
@@ -53,6 +70,12 @@ export function TreeToolbar({
         </button>
         <button onClick={onSwap} className="header-btn" title="Swap encoded/decoded as primary column">
           ⇄ {primary === 'encoded' ? 'Decoded' : 'Encoded'}
+        </button>
+        <button onClick={exportCsv} className="header-btn" title="Export the loaded tree as CSV">
+          📥 CSV
+        </button>
+        <button onClick={exportJson} className="header-btn" title="Export the loaded tree as JSON">
+          📥 JSON
         </button>
       </div>
     </div>

@@ -7,12 +7,14 @@ interface TreeGridProps {
   primary: 'encoded' | 'decoded';
   expanded: Record<string, boolean>;
   loading: Record<string, boolean>;
+  selectedId?: string | null;
+  onSelect?: (nodeId: string) => void;
   onToggleNode: (nodeId: string) => void;
 }
 
 const INDENT_PER_LEVEL = 16;
 
-export function TreeGrid({ nodes, primary, expanded, loading, onToggleNode }: TreeGridProps) {
+export function TreeGrid({ nodes, primary, expanded, loading, selectedId, onSelect, onToggleNode }: TreeGridProps) {
   const { copyToClipboard } = useClipboard();
 
   const renderNode = (node: TreeNode, depth: number): React.ReactNode => {
@@ -28,8 +30,10 @@ export function TreeGrid({ nodes, primary, expanded, loading, onToggleNode }: Tr
     return (
       <div key={node.id} className="tree-node">
         <div
-          className="tree-node-row"
+          className={`tree-node-row${selectedId === node.id ? ' tree-node-selected' : ''}`}
           style={{ paddingLeft: 12 + indent }}
+          data-node-id={node.id}
+          onClick={() => onSelect?.(node.id)}
         >
           {canExpand ? (
             <button

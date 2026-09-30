@@ -33,3 +33,19 @@ export function sortTree(nodes: TreeNode[], primary: NameMode): TreeNode[] {
     )
     .map((n) => (n.children ? { ...n, children: sortTree(n.children, primary) } : n));
 }
+
+/** Rows currently visible on screen, in display order (children only when expanded). */
+export function flattenVisible(
+  nodes: TreeNode[],
+  expanded: Record<string, boolean>,
+): TreeNode[] {
+  const out: TreeNode[] = [];
+  const walk = (list: TreeNode[]) => {
+    for (const node of list) {
+      out.push(node);
+      if (node.children && expanded[node.id]) walk(node.children);
+    }
+  };
+  walk(nodes);
+  return out;
+}

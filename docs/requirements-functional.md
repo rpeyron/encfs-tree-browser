@@ -36,7 +36,9 @@ Technical constraints, architecture and code style live in [requirements-technic
   System Access API): the directory line sits in the header right of the Browse tab and
   defines:
   - **Select directory…** button (File System Access API)
-  - a **mode**: whether names on disk are encoded or decoded
+  - a **mode**: whether names on disk are encoded or decoded — **auto-detected right
+    after a directory is picked** (decode + re-encode round-trip on the root names; no
+    codec / password → keeps the previous choice, set it manually)
   - a **mount point** — shown **only when the active config enables name chaining**
     (`chainedNameIV`); it grafts the directory into the displayed tree and seeds the
     chained-IV walk
@@ -94,19 +96,24 @@ Technical constraints, architecture and code style live in [requirements-technic
 
 ### 4. Navigation & Interaction
 - **Expand/Collapse**:
-  - Click expand icon (▶) to toggle single level
-  - Shift+click expand icon to toggle entire subtree recursively
-  - Keyboard: → to expand, ← to collapse, Space to toggle
-- **Row Selection**: Click row to select; Ctrl+click for multiple; Shift+click for range
-- **Sorting**: Click column header to sort (asc/desc/none)
-- **Search/Filter**: Real-time search across visible columns with debouncing (300ms)
-- **Keyboard Shortcuts**:
-  - ↑↓: Navigate rows
-  - →←: Expand/collapse
-  - Ctrl+F: Focus search
-  - Ctrl+C: Copy path
-  - Esc: Clear selection/search
-  - Ctrl+E: Export
+  - Click the expand icon (▶/▼) to toggle one level (loads children on demand for FSA trees)
+  - Keyboard: **→** expands the selected directory (again → moves to its first child),
+    **←** collapses it (or jumps to the parent), **Enter**/**Space** toggles
+- **Row Selection**: click a row to select (highlighted, auto-scrolled into view);
+  ↑/**↓** move the selection through the visible rows (respects sort/filter/expand)
+- **Search/Filter**: real-time filter over both name representations
+- **Keyboard Shortcuts** (Browse tab, when not typing in a field):
+  - ↑↓: navigate rows
+  - →←: expand / collapse / go to parent
+  - Enter/Space: toggle the selected directory
+  - Ctrl+F: focus the search box
+  - Ctrl+C: copy the primary path of the selected row
+  - Esc: clear selection and search
+- **Export**: toolbar **📥 CSV** / **📥 JSON** download the fully loaded tree (all
+  loaded levels, independent of the search filter)
+  - CSV columns: `type,nameEncoded,nameDecoded,pathEncoded,pathDecoded,size,mtime`
+    (RFC-style quoting for commas/quotes)
+  - JSON: nested array mirroring the tree, both representations per node
 
 ### 5. Clipboard Operations
 - **Copy Path Buttons**: Each row has 2 buttons pairing a clipboard icon with the
@@ -118,8 +125,9 @@ Technical constraints, architecture and code style live in [requirements-technic
 - **Keyboard Support**: Ctrl+C on selected row copies main path
 
 ### 5c. Convert Tab
-- **Input**: a textbox (one name or full path per line) **or** a loaded `.txt` file,
-  **or** the **📄 Sample list** button (built-in samples: loads the fixture path list in
+- **Input**: a textbox (one name or full path per line), a file chosen via the button,
+  a **drag & drop** of a text file onto the textarea (highlighted while hovering),
+  or the **📄 Sample list** button (built-in samples: loads the fixture path list in
   the form matching the selected direction)
 - **Direction toggle**: Encode or Decode (one direction at a time)
 - **Views**: results as a **table** (input | output, failed lines highlighted in red)

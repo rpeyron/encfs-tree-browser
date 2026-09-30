@@ -36,6 +36,7 @@ export function BatchConvert({
   const [copied, setCopied] = useState(false);
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [dragOver, setDragOver] = useState(false);
 
   const run = async () => {
     const lines = input
@@ -149,12 +150,23 @@ export function BatchConvert({
           </button>
         </div>
         <textarea
-          className="batch-input"
+          className={`batch-input${dragOver ? ' drag-over' : ''}`}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={'One name or full path per line\n/dir/file.txt\nplain-name.txt'}
+          placeholder={'One name or full path per line — or drop a .txt file here\n/dir/file.txt\nplain-name.txt'}
           rows={8}
           spellCheck={false}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={async (e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const file = e.dataTransfer.files?.[0];
+            if (file) await handleFile(file);
+          }}
         />
         <div className="batch-actions">
           {loadFileBtn}
@@ -238,6 +250,7 @@ export function BatchConvert({
             onExpandOne={() => setAllExpanded(true)}
             onExpandAll={() => setAllExpanded(true)}
             onCollapse={() => setAllExpanded(false)}
+            exportNodes={tree}
           />
           <div className="display-content">
             <TreeGrid

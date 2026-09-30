@@ -37,6 +37,10 @@ Usage and build commands: [../README.md](../README.md) (codec wiring and archite
   password sanitizing, legacy-key migration
 - `src/lib/builtin-configs.ts` — sample configs (`?raw` imports) + `conf/*.encfs6.xml`
   glob (drop-in built-ins, gitignored)
+- `src/lib/mode-detect.ts` — encode/decode mode auto-detection (decode + re-encode
+  round-trip on root names, ratio threshold)
+- `src/lib/export.ts` — flatten tree, CSV/JSON serialization, browser download
+- `src/lib/encfs-xml.ts` — `chainedNameIV` flag read from the xml
 
 **Tree building / scanning:**
 - `src/lib/tree-builder.ts` — tree construction from FSA scans, chained-IV conversion,
@@ -141,7 +145,8 @@ docs/                  # This file + functional requirements
 - **Unit tests**: `tests/lib/` — tree-builder (chained-IV conversion in both modes,
   raw-name fallback, package wiring), chain (grafting, path conversion), config-store
   (round-trips, password sanitizing, legacy migration), tree-filter (search on both
-  representations, sort by displayed primary name)
+  representations, sort by displayed primary name, flatten visible rows for keyboard
+  nav), mode-detect (encoded/decoded fixtures), export (flatten, CSV quoting, JSON tree)
 - **Crypto algorithm tests**: `../encfs-names-ts` (`npm test` there) — real encrypted
   trees + Rust golden vectors
 - **Not yet covered**: component/UI tests (no browser-test framework installed)
@@ -212,11 +217,11 @@ docs/                  # This file + functional requirements
 2. ✅ Batch encode/decode (table + tree views)
 3. ✅ Single-directory browse with sample path lists for Convert
 4. ✅ Standalone single-file build
-5. Drag & drop file upload
-6. Auto-detect mode
-7. Export to CSV/JSON
-8. Statistics panel
-9. Keyboard navigation
+5. ✅ Drag & drop file upload (config xml + Convert input)
+6. ✅ Auto-detect encoded/decoded mode (after directory pick)
+7. ✅ Export tree to CSV/JSON
+8. ✅ Keyboard shortcuts and navigation (↑↓ →← Enter/Space Ctrl+F Ctrl+C Esc)
+9. Statistics panel
 10. Advanced filtering
 11. Compare view (split screen)
 12. Error recovery on partial scan

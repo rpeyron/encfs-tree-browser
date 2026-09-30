@@ -13,6 +13,10 @@ converter, and a single-file offline build.
 - **Swap / Sort**: flip which representation is the primary column; alphabetical sort by
   the displayed name at the root and in every directory
 - **Search & copy**: real-time filter, copy full encoded (📋🔒) or decoded (📋🔓) paths
+- **Auto-detect mode**: encoded/decoded is guessed automatically after picking a directory
+- **Export**: 📥 CSV / 📥 JSON download of the loaded tree
+- **Keyboard**: ↑↓ navigate, →← expand/collapse/parent, Ctrl+F search, Ctrl+C copy, Esc clear
+- **Drag & drop**: drop a text file onto the Convert input (xml drag & drop on config upload)
 - **Named configurations**: header dropdown with your configs, drop-in `conf/*.encfs6.xml`
   built-ins, and bundled samples; add/edit via modal, optional **Remember password**
 - **Mount point**: shown only when the config enables name chaining, grafts the selected
