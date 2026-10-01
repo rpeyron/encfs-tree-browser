@@ -8,7 +8,7 @@ import { TreeGrid } from './components/TreeGrid';
 import { EncfsNameCodec } from 'encfs-filename-codec';
 import { scanDirectory } from './lib/fs-scanner';
 import { buildTreeLevel, buildFullPaths, findNodeById } from './lib/tree-builder';
-import { graftSteps, prefixIds, relPathOf, normalizeMount } from './lib/chain';
+import { graftSteps, prefixIds, relPathOf, normalizeMount, directoryDisplayNames, wrapDirectoryRoot } from './lib/chain';
 import { filterNodes, sortTree, flattenVisible } from './lib/tree-filter';
 import { detectNameMode } from './lib/mode-detect';
 import { BUILTIN_CONFIGS, BUILTIN_SAMPLES, defaultStepFor } from './lib/builtin-configs';
@@ -41,24 +41,16 @@ const SUPPORTS_FSA = typeof window !== 'undefined' && 'showDirectoryPicker' in w
 
 migrateLegacy();
 
-async function mountNamespaces(
+/** The mount field is typed as a decoded path; derive its encoded form (every level, chained IVs). */
+async function prefixNamespaces(
   codec: EncfsNameCodec,
   mount: string,
-  mode: NameMode,
-): Promise<{ mpDecoded: string; mpEncoded: string }> {
-  if (!mount) return { mpDecoded: '', mpEncoded: '' };
-  const bare = mount.replace(/^\/+/, '');
-  if (mode === 'decoded') {
-    try {
-      return { mpDecoded: mount, mpEncoded: `/${await codec.encodePath(bare)}` };
-    } catch {
-      return { mpDecoded: mount, mpEncoded: mount };
-    }
-  }
+): Promise<{ decoded: string; encoded: string }> {
+  if (!mount) return { decoded: '', encoded: '' };
   try {
-    return { mpDecoded: `/${await codec.decodePath(bare)}`, mpEncoded: mount };
+    return { decoded: mount, encoded: `/${await codec.encodePath(mount.replace(/^\/+/, ''))}` };
   } catch {
-    return { mpDecoded: mount, mpEncoded: mount };
+    return { decoded: mount, encoded: mount };
   }
 }
 
@@ -179,13 +171,29 @@ export function App() {
       const entries = await scanDirectory(handle);
       const mode = await detectNameMode(c, entries.map((e) => e.name));
       if (mode) applyDetectedMode(stepId, mode);
-    } catch {
+      const names = await directoryDisplayNames(c, handle.name, mode ?? 'encoded');
+      console.log('[directory] selection', {
+        name: handle.name,
+        detectedMode: mode ?? '(unchanged)',
+        fullPathDecoded: `/${names.nameDecoded}`,
+        fullPathEncoded: `/${names.nameEncoded}`,
+        entries: entries.length,
+      });
+    } catch (err) {
       // no codec/password yet — keep the current mode, user picks manually
+      console.log('[directory] selection (mode not detected)', {
+        name: handle.name,
+        reason: err instanceof Error ? err.message : String(err),
+      });
     }
   };
 
   const handleDirectoryPicked = (handle: FileSystemDirectoryHandle) => {
-    if (!step) return;
+    if (!step) {
+      setError('Select a configuration first');
+      return;
+    }
+    console.log('[directory] picked', { name: handle.name, stepId: step.id });
     fsaHandleRef.current = handle;
     handleStepChange({ ...step, dirName: handle.name });
     setError('');
@@ -263,17 +271,42 @@ export function App() {
       const handle = await resolveHandle();
       if (!handle) throw new Error('Directory missing — select it again');
       const mount = normalizeMount(step.mountPoint);
+      const isChained = activeConfig ? hasChainedNameIv(activeConfig.xml) : false;
+      // Chained volume with a mount point: the mount path (synthetic graft) is the
+      // only root shown. Otherwise the root row is the selected directory itself,
+      // its full path optionally prefixed by the mount field.
+      const useGraft = isChained && mount !== '';
+      const pre = await prefixNamespaces(c, mount);
+      // On-disk namespace of the mount for the chained IV walk (dir mode decides
+      // whether the mount must be encoded or is already plain).
+      const ivBase = useGraft ? (step.mode === 'encoded' ? pre.encoded : pre.decoded) : '';
       const entries = await scanDirectory(handle);
-      const tree = await buildTreeLevel(entries, c, step.mode, '', mount);
-      const { mpDecoded, mpEncoded } = await mountNamespaces(c, mount, step.mode);
-      const withPaths = buildFullPaths(tree, mount, mpDecoded, mpEncoded);
-      setNodes(graftSteps([{ mount, nodes: prefixIds(withPaths, step.id) }]));
-      setExpanded({});
+      const tree = await buildTreeLevel(entries, c, step.mode, '', ivBase);
+      let rootNodes: TreeNode[];
+      if (!useGraft) {
+        const names = await directoryDisplayNames(c, step.dirName, step.mode);
+        const wrapperDecoded = `${pre.decoded}/${names.nameDecoded}`;
+        const wrapperEncoded = `${pre.encoded}/${names.nameEncoded}`;
+        const withPaths = buildFullPaths(tree, '', wrapperDecoded, wrapperEncoded);
+        rootNodes = wrapDirectoryRoot(prefixIds(withPaths, step.id), {
+          stepId: step.id,
+          onDiskName: step.dirName,
+          ...names,
+          prefixDecoded: pre.decoded,
+          prefixEncoded: pre.encoded,
+        });
+      } else {
+        rootNodes = prefixIds(buildFullPaths(tree, ivBase, pre.decoded, pre.encoded), step.id);
+      }
+      setNodes(graftSteps([{ mount: useGraft ? mount : '', nodes: rootNodes }]));
+      // Keep children visible right after the scan: pre-expand the root row when present
+      setExpanded(useGraft ? {} : { [`${step.id}:`]: true });
       setLoading({});
       const prefs: AppPrefs = loadPrefs();
       if (!prefs.displayPrimary) setPrimary(step.mode);
       setView('browse');
     } catch (err) {
+      console.error('[scan] failed', err);
       setError(err instanceof Error ? err.message : 'Failed to scan directory');
     } finally {
       setScanning(false);
@@ -346,6 +379,8 @@ export function App() {
   };
 
   const onToggleNode = (id: string) => {
+    const current = findNodeById(nodesRef.current, id);
+    if (current?.rootDirectory) return; // root row stays open
     const willExpand = !expanded[id];
     if (willExpand) {
       const node = findNodeById(nodesRef.current, id);
@@ -439,7 +474,8 @@ export function App() {
           }
           const node = flat[idx];
           event.preventDefault();
-          if (node.isDir && !kb.expanded[node.id]) kb.onToggleNode(node.id);
+          const isOpen = node.rootDirectory || kb.expanded[node.id];
+          if (node.isDir && !isOpen) kb.onToggleNode(node.id);
           else if (node.isDir && node.children?.[0]) focusRow(node.children[0].id);
           break;
         }
@@ -447,7 +483,7 @@ export function App() {
           if (idx < 0) break;
           event.preventDefault();
           const node = flat[idx];
-          if (node.isDir && kb.expanded[node.id]) kb.onToggleNode(node.id);
+          if (node.isDir && !node.rootDirectory && kb.expanded[node.id]) kb.onToggleNode(node.id);
           else {
             const parentId = node.id.slice(0, node.id.lastIndexOf('/'));
             if (parentId.includes(':') && parentId !== node.id) focusRow(parentId);
@@ -470,7 +506,7 @@ export function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
-  const chained = activeConfig ? hasChainedNameIv(activeConfig.xml) : false;
+
   const sampleList = activeConfig ? BUILTIN_SAMPLES[activeConfig.id] : undefined;
 
   return (
@@ -499,7 +535,11 @@ export function App() {
             ].map((cfg) => (
               <option key={cfg.id} value={cfg.id}>
                 {cfg.name}
-                {cfg.source === 'builtin' ? ' (sample)' : ''}
+                {cfg.source === 'builtin'
+                  ? cfg.id.startsWith('builtin-conf-')
+                    ? ' (conf)'
+                    : ' (sample)'
+                  : ''}
               </option>
             ))}
             <option value="__add__">➕ Add configuration…</option>
@@ -548,7 +588,6 @@ export function App() {
           <div className="header-dir">
             <DirectorySetup
               step={step}
-              chained={chained}
               onDirectory={(h) => void handleDirectoryPicked(h)}
               onChange={handleStepChange}
               onError={setError}
@@ -595,9 +634,19 @@ export function App() {
                 <div className="tree-grid-empty-content">
                   <div className="tree-grid-empty-icon">🔒</div>
                   <p>No tree loaded yet</p>
-                  <p className="tree-grid-empty-hint">
-                    Select a configuration in the header, pick a directory and hit Scan — or convert name lists in the Convert tab
-                  </p>
+                  <ol className="tree-grid-empty-steps">
+                    <li>Pick a <strong>configuration</strong> in the header (password beside it)</li>
+                    <li>
+                      <strong>📂 Select directory…</strong> — in the picker press{' '}
+                      <strong>Ctrl+L / Alt+D</strong> to type any path (hidden folders too);
+                      the mode is auto-detected
+                    </li>
+                    <li>
+                      Optionally set a <strong>mount prefix</strong> (decoded path shown in
+                      front of the root), then <strong>🔍 Scan</strong>
+                    </li>
+                    <li>Or convert name lists in the <strong>Convert</strong> tab</li>
+                  </ol>
                 </div>
               </div>
             ) : (

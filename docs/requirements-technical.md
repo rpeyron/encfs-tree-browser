@@ -10,8 +10,8 @@ Usage and build commands: [../README.md](../README.md) (codec wiring and archite
 - **Tree grid**: plain recursive rows in `TreeGrid.tsx` — lazy expansion keeps the DOM small;
   virtualisation is a future enhancement, not current behaviour
 - **Single directory browsing**: a configuration (xml + password) is separate from its
-  directory binding; the binding grafts its tree at the mount point (`src/lib/chain.ts`),
-  and the mount point also seeds the chained-IV walk for `chainedNameIV` volumes
+  directory binding; the mount field prefixes the root row (or, on `chainedNameIV`
+  volumes with a mount set, grafts only the mount path) and seeds the chained-IV walk
 - **`encfs-filename-codec` (`file:../encfs-names-ts`)**: all EncFS filename crypto in one
   local package — MAC-verified, vector-tested, reusable. Rebuild it (`npm run build` in
   `encfs-names-ts`) after editing it; the app has no crypto code of its own
@@ -45,7 +45,9 @@ Usage and build commands: [../README.md](../README.md) (codec wiring and archite
 **Tree building / scanning:**
 - `src/lib/tree-builder.ts` — tree construction from FSA scans, chained-IV conversion,
   full path mapping
-- `src/lib/chain.ts` — directory grafting at mount points, id prefixing, path conversion
+- `src/lib/chain.ts` — mount-prefix / grafting at mount points, id prefixing, path
+  conversion, root row for the selected directory (`wrapDirectoryRoot` +
+  `directoryDisplayNames`, optional display `prefix`)
 - `src/lib/fs-scanner.ts` — File System Access API wrapper (one directory level)
 
 **Persistence:**
@@ -55,7 +57,7 @@ Usage and build commands: [../README.md](../README.md) (codec wiring and archite
 - `TreeGrid.tsx` — tree rendering (expand/collapse, copy buttons, lazy children)
 - `TreeToolbar.tsx` — shared toolbar (search, sort, expand, swap) for both tabs
 - `DirectorySetup.tsx` — directory line in the header (Select directory, mode,
-  mount point shown only for chainedNameIV configs)
+  mount prefix — always visible)
 - `ConfigModal.tsx` — add/edit/delete configuration modal (incl. Remember password)
 - `BatchConvert.tsx` — Convert tab (table view + same tree as Browse)
 - `ConfigUploader.tsx`, `DirectoryPicker.tsx`, `SearchBar.tsx` — supporting inputs
@@ -210,18 +212,11 @@ docs/                  # This file + functional requirements
 - Sizes (gzip): JS ≈ 62 KB (22 KB), CSS ≈ 18 KB (3,7 KB), standalone ≈ 80 KB (25,4 KB).
   Levers already applied: Preact runtime via alias, dead-CSS removal, native `DOMParser`
   (no XML library), `removeViteModuleLoader`, target es2022
-
-## Future Enhancements
-
-1. ✅ Config persistence (localStorage + IndexedDB dir handles)
-2. ✅ Batch encode/decode (table + tree views)
-3. ✅ Single-directory browse with sample path lists for Convert
-4. ✅ Standalone single-file build
-5. ✅ Drag & drop file upload (config xml + Convert input)
-6. ✅ Auto-detect encoded/decoded mode (after directory pick)
-7. ✅ Export tree to CSV/JSON
-8. ✅ Keyboard shortcuts and navigation (↑↓ →← Enter/Space Ctrl+F Ctrl+C Esc)
-9. Statistics panel
-10. Advanced filtering
-11. Compare view (split screen)
-12. Error recovery on partial scan
+- **GitHub Pages**: `.github/workflows/deploy-pages.yml` **inside this repo** checks
+  out the app as `encfs-tree-browser/` and the codec as `encfs-names-ts/` (siblings →
+  resolves `file:../encfs-names-ts`), builds codec → app (`npm ci`, both with lockfiles)
+  → standalone, and publishes `encfs-browser.html` as the site `index.html`.
+  Zero-config assumptions: the codec lives at `<owner>/encfs-names-ts` (public, same
+  GitHub account — override with repo variable `ENCFS_NAMES_REPO`), Pages source =
+  GitHub Actions. `conf/` is gitignored, so drop-in configs are absent from the
+  published page unless force-added

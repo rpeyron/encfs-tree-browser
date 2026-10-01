@@ -20,22 +20,24 @@ export function TreeGrid({ nodes, primary, expanded, loading, selectedId, onSele
   const renderNode = (node: TreeNode, depth: number): React.ReactNode => {
     const isExpanded = expanded[node.id];
     const isLoading = loading[node.id];
+    const isRoot = node.rootDirectory === true;
     const canExpand = node.isDir;
     const childrenLoaded = node.children && node.children.length > 0;
-    const icon = canExpand ? (isExpanded ? '📂' : '📁') : '📄';
+    const icon = isRoot ? null : canExpand ? (isExpanded ? '📂' : '📁') : '📄';
     const name = primary === 'encoded' ? node.nameDecoded : node.nameEncoded;
     const alternate = primary === 'encoded' ? node.nameEncoded : node.nameDecoded;
     const indent = depth * INDENT_PER_LEVEL;
+    const childrenVisible = isRoot || isExpanded;
 
     return (
       <div key={node.id} className="tree-node">
         <div
-          className={`tree-node-row${selectedId === node.id ? ' tree-node-selected' : ''}`}
+          className={`tree-node-row${isRoot ? ' tree-node-root' : ''}${selectedId === node.id ? ' tree-node-selected' : ''}`}
           style={{ paddingLeft: 12 + indent }}
           data-node-id={node.id}
           onClick={() => onSelect?.(node.id)}
         >
-          {canExpand ? (
+          {isRoot ? null : canExpand ? (
             <button
               onClick={() => onToggleNode(node.id)}
               className="tree-node-toggle"
@@ -46,7 +48,7 @@ export function TreeGrid({ nodes, primary, expanded, loading, selectedId, onSele
           ) : (
             <div className="tree-node-spacer" />
           )}
-          <span className="tree-node-icon">{icon}</span>
+          {icon && <span className="tree-node-icon">{icon}</span>}
           <div className="tree-node-name">
             <div className="tree-node-name-primary" title={name}>{name}</div>
             {alternate && <div className="tree-node-name-alternate" title={alternate}>{alternate}</div>}
@@ -66,7 +68,7 @@ export function TreeGrid({ nodes, primary, expanded, loading, selectedId, onSele
             <button onClick={() => copyToClipboard(node.pathDecoded)} className="tree-node-copy-btn copy-decoded" title="Copy decoded path">📋🔓</button>
           </div>
         </div>
-        {isExpanded && (
+        {childrenVisible && (
           <div className="tree-children">
             {isLoading ? (
               <div className="tree-loading" style={{ paddingLeft: 12 + (depth + 1) * INDENT_PER_LEVEL }}>

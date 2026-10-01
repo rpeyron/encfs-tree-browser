@@ -1,6 +1,15 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { EncfsNameCodec } from 'encfs-filename-codec';
-import { convertPathThroughChain, convertLines, graftSteps, prefixIds, relPathOf, normalizeMount } from '../../src/lib/chain';
+import {
+  convertPathThroughChain,
+  convertLines,
+  graftSteps,
+  prefixIds,
+  relPathOf,
+  normalizeMount,
+  directoryDisplayNames,
+  wrapDirectoryRoot,
+} from '../../src/lib/chain';
 import type { TreeNode } from '../../src/types/index';
 import realVectors from '../fixtures/encfs-real-test-vectors.json';
 
@@ -60,6 +69,76 @@ describe('id helpers', () => {
     expect(normalizeMount('/')).toBe('');
     expect(normalizeMount('a/b/')).toBe('/a/b');
     expect(normalizeMount('//x//y')).toBe('/x/y');
+  });
+});
+
+describe('directoryDisplayNames / wrapDirectoryRoot', () => {
+  let codec: EncfsNameCodec;
+  const dirPair = () => realVectors.configurations.find((c) => c.name === 'direct-nochain')!.pairs.find((p) => p.decoded === 'dir_1')!;
+
+  beforeAll(async () => {
+    codec = await EncfsNameCodec.fromV6Xml(
+      realVectors.configurations.find((c) => c.name === 'direct-nochain')!.config,
+      realVectors.password,
+    );
+  }, 300000);
+
+  it('decodes an encoded on-disk directory name', async () => {
+    const pair = dirPair();
+    const names = await directoryDisplayNames(codec, pair.encoded, 'encoded');
+    expect(names).toEqual({ nameDecoded: 'dir_1', nameEncoded: pair.encoded });
+  });
+
+  it('encodes a decoded on-disk directory name', async () => {
+    const pair = dirPair();
+    const names = await directoryDisplayNames(codec, 'dir_1', 'decoded');
+    expect(names).toEqual({ nameDecoded: 'dir_1', nameEncoded: pair.encoded });
+  });
+
+  it('keeps a non-volume folder name raw on both sides', async () => {
+    const names = await directoryDisplayNames(codec, 'my local folder', 'encoded');
+    expect(names).toEqual({ nameDecoded: 'my local folder', nameEncoded: 'my local folder' });
+  });
+
+  it('wraps children under a root row with both full paths', () => {
+    const children = prefixIds([node('/child', 'child')], 'step-1');
+    const [root] = wrapDirectoryRoot(children, {
+      stepId: 'step-1',
+      onDiskName: 'vlPAQlbHW8iyvhh4gs8eppL-',
+      nameDecoded: 'dir_1',
+      nameEncoded: 'vlPAQlbHW8iyvhh4gs8eppL-',
+    });
+
+    expect(root.id).toBe('step-1:');
+    expect(root.nameDecoded).toBe('/dir_1');
+    expect(root.nameEncoded).toBe('/vlPAQlbHW8iyvhh4gs8eppL-');
+    expect(root.pathDecoded).toBe('/dir_1');
+    expect(root.pathEncoded).toBe('/vlPAQlbHW8iyvhh4gs8eppL-');
+    expect(root.rootDirectory).toBe(true);
+    expect(root.isDir).toBe(true);
+    expect(root.isLoaded).toBe(true);
+    expect(root.children).toHaveLength(1);
+
+    // parent navigation: parent id derived from the child id lands on the root row
+    const childId = root.children![0].id;
+    expect(childId).toBe('step-1:/child');
+    expect(childId.slice(0, childId.lastIndexOf('/'))).toBe(root.id);
+    expect(relPathOf(childId)).toBe('/child');
+  });
+
+  it('prefixes the root full path, encoding every prefix level on the encoded side', () => {
+    const [root] = wrapDirectoryRoot([], {
+      stepId: 'step-1',
+      onDiskName: 'dir_1',
+      nameDecoded: 'dir_1',
+      nameEncoded: 'vlPAQlbHW8iyvhh4gs8eppL-',
+      prefixDecoded: '/data/vault',
+      prefixEncoded: '/kX9ZpQ/7hLmA2',
+    });
+    expect(root.nameDecoded).toBe('/data/vault/dir_1');
+    expect(root.nameEncoded).toBe('/kX9ZpQ/7hLmA2/vlPAQlbHW8iyvhh4gs8eppL-');
+    expect(root.pathDecoded).toBe('/data/vault/dir_1');
+    expect(root.pathEncoded).toBe('/kX9ZpQ/7hLmA2/vlPAQlbHW8iyvhh4gs8eppL-');
   });
 });
 

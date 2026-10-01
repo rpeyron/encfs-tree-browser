@@ -14,6 +14,8 @@ export interface TreeNode {
   isLoaded?: boolean;
   /** Owning directory step (multi-directory sessions); absent on synthetic mount folders until grafted */
   stepId?: string;
+  /** Root row for the selected directory: full path, no icon, no toggle, always open. */
+  rootDirectory?: boolean;
 }
 
 export type NameMode = 'encoded' | 'decoded';

@@ -3,8 +3,6 @@ import { DirectoryPicker } from './DirectoryPicker';
 
 interface DirectorySetupProps {
   step: DirBindingStep;
-  /** Mount point input only matters for chainedNameIV volumes. */
-  chained: boolean;
   onDirectory: (handle: FileSystemDirectoryHandle) => void;
   onChange: (step: DirBindingStep) => void;
   onError: (error: string) => void;
@@ -13,12 +11,14 @@ interface DirectorySetupProps {
 
 export function DirectorySetup({
   step,
-  chained,
   onDirectory,
   onChange,
   onError,
   disabled,
 }: DirectorySetupProps) {
+  // Full path of the selected folder itself (no mount prefix — that shows in the tree).
+  const selectedPath = step.dirName ? `/${step.dirName}` : '';
+
   return (
     <div className="dir-bar">
       <div className="dir-bar-source">
@@ -27,11 +27,17 @@ export function DirectorySetup({
           onError={onError}
           isLoading={disabled}
           label="📂 Select directory…"
+          title={
+            'Select a folder — in the native picker press Ctrl+L (or Alt+D) and paste\n' +
+            'any path, including hidden folders.'
+          }
         />
         {step.dirName ? (
-          <span className="step-dirname">📁 {step.dirName}</span>
+          <span className="step-dirname" title={selectedPath}>📁 {selectedPath}</span>
         ) : (
-          <span className="dir-bar-hint">pick the EncFS directory to display</span>
+          <span className="dir-bar-hint">
+            Ctrl+L / Alt+D → paste any path (hidden folders too)
+          </span>
         )}
       </div>
       <select
@@ -44,17 +50,15 @@ export function DirectorySetup({
         <option value="encoded">🔒 Encoded</option>
         <option value="decoded">🔓 Decoded</option>
       </select>
-      {chained && (
-        <input
-          type="text"
-          className="step-mount"
-          value={step.mountPoint}
-          onChange={(e) => onChange({ ...step, mountPoint: e.target.value })}
-          placeholder="/ (root)"
-          disabled={disabled}
-          title="Where this directory connects in the tree (on-disk namespace)"
-        />
-      )}
+      <input
+        type="text"
+        className="step-mount"
+        value={step.mountPoint}
+        onChange={(e) => onChange({ ...step, mountPoint: e.target.value })}
+        placeholder="/ (root)"
+        disabled={disabled}
+        title="Prefix in front of the tree root (on-disk namespace). On chainedNameIV volumes with a mount set, the root shows only the mount path."
+      />
     </div>
   );
 }

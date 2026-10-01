@@ -4,6 +4,7 @@ interface DirectoryPickerProps {
   selectedPath?: string;
   isLoading?: boolean;
   label?: string;
+  title?: string;
 }
 
 export function DirectoryPicker({
@@ -12,6 +13,7 @@ export function DirectoryPicker({
   selectedPath,
   isLoading,
   label = 'Select directory',
+  title,
 }: DirectoryPickerProps) {
   const handlePickDirectory = async () => {
     try {
@@ -29,7 +31,7 @@ export function DirectoryPicker({
 
   return (
     <>
-      <button type="button" className="step-btn" onClick={handlePickDirectory} disabled={isLoading}>
+      <button type="button" className="step-btn" onClick={handlePickDirectory} disabled={isLoading} title={title}>
         {label}
       </button>
       {selectedPath && <span className="step-dirname" title={selectedPath}>📁 {selectedPath}</span>}

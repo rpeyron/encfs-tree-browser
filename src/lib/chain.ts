@@ -1,5 +1,7 @@
 import type { EncfsNameCodec } from 'encfs-filename-codec';
-import type { ConvertRow, TreeNode } from '../types/index';
+import type { ConvertRow, NameMode, TreeNode } from '../types/index';
+
+const utf8 = new TextDecoder('utf-8', { fatal: true });
 
 export function normalizeMount(mountPoint: string): string {
   const segments = mountPoint.split('/').filter(Boolean);
@@ -20,6 +22,70 @@ export function prefixIds(nodes: TreeNode[], stepId: string): TreeNode[] {
 export function relPathOf(id: string): string {
   const idx = id.indexOf(':');
   return idx === -1 ? id : id.slice(idx + 1);
+}
+
+/**
+ * Decoded/encoded names of the selected directory itself (root parent IV = 0).
+ * Falls back to the raw on-disk name for both sides when it is not a volume
+ * name (e.g. the local folder that holds the volume root).
+ */
+export async function directoryDisplayNames(
+  codec: EncfsNameCodec,
+  onDiskName: string,
+  mode: NameMode,
+): Promise<{ nameDecoded: string; nameEncoded: string }> {
+  try {
+    if (mode === 'encoded') {
+      const { plaintext } = await codec.decryptName(onDiskName, 0n);
+      return { nameDecoded: utf8.decode(plaintext), nameEncoded: onDiskName };
+    }
+    return {
+      nameDecoded: onDiskName,
+      nameEncoded: (await codec.encryptName(onDiskName, 0n)).encodedName,
+    };
+  } catch {
+    return { nameDecoded: onDiskName, nameEncoded: onDiskName };
+  }
+}
+
+export interface DirectoryRootMeta {
+  stepId: string;
+  onDiskName: string;
+  nameDecoded: string;
+  nameEncoded: string;
+  /** Decoded prefix in front of the root (`''` or `'/pfx'`), from the mount field. */
+  prefixDecoded?: string;
+  /** Encoded form of the prefix (each level encoded) for the encoded column. */
+  prefixEncoded?: string;
+}
+
+/**
+ * Root row for the selected directory: its **complete path** (both
+ * representations) on a single row, no icon/toggle handling done by TreeGrid.
+ * The id is `<stepId>:` so parent navigation from `<stepId>:/child` lands here.
+ */
+export function wrapDirectoryRoot(children: TreeNode[], meta: DirectoryRootMeta): TreeNode[] {
+  const prefixDecoded = meta.prefixDecoded ?? '';
+  const prefixEncoded = meta.prefixEncoded ?? prefixDecoded;
+  const pathDecoded = `${prefixDecoded}/${meta.nameDecoded}`;
+  const pathEncoded = `${prefixEncoded}/${meta.nameEncoded}`;
+  const wrapper: TreeNode = {
+    id: `${meta.stepId}:`,
+    name: meta.onDiskName,
+    nameDecoded: pathDecoded,
+    nameEncoded: pathEncoded,
+    path: `${prefixDecoded}/${meta.onDiskName}`,
+    pathDecoded,
+    pathEncoded,
+    size: 0,
+    mtime: 0,
+    isDir: true,
+    children,
+    isLoaded: true,
+    stepId: meta.stepId,
+    rootDirectory: true,
+  };
+  return [wrapper];
 }
 
 interface StepPart {

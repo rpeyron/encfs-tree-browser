@@ -6,8 +6,8 @@ converter, and a single-file offline build.
 
 ## Features
 
-- **Browse** (Chrome/Edge): pick a directory, see decoded names next to their encoded
-  counterparts (lazy loading, works on big volumes)
+- **Browse** (Chrome/Edge): pick a directory and see decoded names next to their
+  encoded counterparts (lazy loading, works on big volumes)
 - **Convert**: paste or load a list of names/paths, encode or decode, view the result as
   a table or as the same interactive tree as Browse
 - **Swap / Sort**: flip which representation is the primary column; alphabetical sort by
@@ -19,8 +19,9 @@ converter, and a single-file offline build.
 - **Drag & drop**: drop a text file onto the Convert input (xml drag & drop on config upload)
 - **Named configurations**: header dropdown with your configs, drop-in `conf/*.encfs6.xml`
   built-ins, and bundled samples; add/edit via modal, optional **Remember password**
-- **Mount point**: shown only when the config enables name chaining, grafts the selected
-  directory at the right place in the tree
+- **Mount point**: always visible — a decoded path prefixed in front of the tree root;
+  the encoded view encodes every prefix level too (on chainedNameIV volumes with a
+  mount set, the root shows the mount path only)
 - **Persistence**: configs, directory setup and display preferences survive reloads
 - **Dark mode**: follows the system light/dark preference
 - **Standalone build**: one self-contained HTML file that runs offline
@@ -65,10 +66,27 @@ then stored in that browser's localStorage for the `file://` origin.
 - Choose Decode or Encode → **☰ Table** or **🌳 Tree** view, **📋 Copy all**
 
 ### Browse tab (Chrome/Edge)
-1. **📂 Select directory…**, set the mode (mount point appears only for chainedNameIV
-   configs), **🔍 Scan**
-2. Expand, search, sort, **⇄ Swap** the primary column
-3. Copy **📋🔒** (encoded) / **📋🔓** (decoded) paths from any row
+1. **📂 Select directory…** — in the native picker, **Ctrl+L** (or Alt+D) types any
+   path, including hidden folders. Set the mode and an optional **mount prefix**,
+   then **🔍 Scan**
+2. The tree opens with a root row for the selected directory showing its **complete
+   path** both ways (no icon, no toggle — always open)
+3. Expand, search, sort, **⇄ Swap** the primary column, **📥 CSV / JSON** export
+4. Copy **📋🔒** (encoded) / **📋🔓** (decoded) paths from any row
+
+## GitHub Pages
+
+`.github/workflows/deploy-pages.yml` (in **this** repo) builds the standalone bundle
+on every push to `main`/`master` and publishes it as the site `index.html` — no manual
+setup beyond:
+
+1. Publish the codec repo as **`<your-account>/encfs-names-ts`** (public) — the
+   workflow checks it out automatically as a sibling of this repo, which is what the
+   dependency `file:../encfs-names-ts` resolves to. Renamed/private? set the repo
+   variable **`ENCFS_NAMES_REPO`** to `<owner>/<name>` (a PAT would be required if private)
+2. Settings → Pages → Source: **GitHub Actions**
+3. Note: `conf/` is gitignored — drop-in configs are local only unless you
+   `git add -f conf/xxxx.encfs6.xml` (they would then be inlined into the published page)
 
 ## Browser Compatibility
 

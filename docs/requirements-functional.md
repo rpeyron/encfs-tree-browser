@@ -39,9 +39,12 @@ Technical constraints, architecture and code style live in [requirements-technic
   - a **mode**: whether names on disk are encoded or decoded — **auto-detected right
     after a directory is picked** (decode + re-encode round-trip on the root names; no
     codec / password → keeps the previous choice, set it manually)
-  - a **mount point** — shown **only when the active config enables name chaining**
-    (`chainedNameIV`); it grafts the directory into the displayed tree and seeds the
-    chained-IV walk
+  - a **mount point** — **always visible**, typed as a **decoded path**, used as a
+    **prefix in front of the tree root** (e.g. mount `/data/vault` → decoded root
+    `/data/vault/dir_1`); in the **encoded representation every prefix level is
+    encoded** too (chained IVs from the volume root). On a `chainedNameIV` volume
+    with a mount set, the root shows **only the mount path** (synthetic graft, both
+    representations derived) and the mount also seeds the chained-IV walk
   - a **Scan** button right after the mode/mount controls
 - **Sample path lists**: built-in samples ship with the EncFS 1.9.5 fixture file list
   (`src/assets/configs/*.samples*.txt`), loadable in the Convert tab in the form
@@ -56,6 +59,14 @@ Technical constraints, architecture and code style live in [requirements-technic
 - Graceful error messages with recovery options
 
 ### 2. Directory Scanning & Tree Display
+- **Root row**: the tree starts with a **single row for the selected directory showing
+  its complete path** (`/…`, prefixed by the mount field when set) in both
+  representations (decoded + encoded, like every other row, copy buttons included) —
+  **no folder icon, no expand/collapse toggle, permanently open** (children hang under
+  it and are visible right after the scan; Collapse All keeps them). A non-volume
+  folder name (local mount folder) is shown raw on both sides
+- **Chained volume with a mount point ≠ /**: only the **mount path** is shown at the
+  root (synthetic graft at the mount point) — no extra directory row
 - **Lazy Loading**: FSA-backed scan retrieves only the requested level; children are
   loaded on demand
 - **On-Demand Expansion**: toolbar actions **▾ Expand 1 level**, **▾▾ Expand all**,
@@ -187,8 +198,8 @@ Technical constraints, architecture and code style live in [requirements-technic
 1. Header: pick a configuration in the dropdown (samples first entry is user list,
    samples last, "Add configuration…" opens the modal)
 2. Enter the password (optionally check "Remember password" in the modal)
-3. Browse tab: **📂 Select directory…**, set mode (mount point appears only for
-   chainedNameIV configs), click **🔍 Scan**
+3. Browse tab: **📂 Select directory…** (tip: Ctrl+L types any path, incl. hidden
+   folders), set mode and an optional mount prefix, click **🔍 Scan**
 4. Decoded names + encoded alternates; expand, search, sort, swap, copy 📋🔒/📋🔓
 
 ### Flow 2: Swap / Sort Display
@@ -231,5 +242,6 @@ Technical constraints, architecture and code style live in [requirements-technic
 - Directory browsing needs the File System Access API (Chrome/Edge); elsewhere the
   Browse tab is hidden and only the Convert tab is available
 - Directory structure follows standard filesystem hierarchy
-- Mount points are given in the on-disk namespace of the directory
+- Mount points are typed as decoded paths (the encoded form, every level, is derived
+  by the codec)
 

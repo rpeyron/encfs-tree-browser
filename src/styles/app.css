@@ -421,7 +421,8 @@ body {
 .tree-children {
   background-color: #f9fafb;
   border-left: 2px solid var(--color-slate-200);
-  padding-left: 24px;
+  /* indentation comes from the per-level row padding only — no extra shift */
+  padding-left: 0;
 }
 
 /* Missing indigo scale (used by copy buttons / converter) */
@@ -1017,6 +1018,20 @@ body {
   line-height: 1.5;
 }
 
+.tree-grid-empty-steps {
+  text-align: left;
+  max-width: 440px;
+  margin: 10px auto 0;
+  padding-left: 20px;
+  font-size: 0.82rem;
+  color: var(--color-slate-500);
+  line-height: 1.7;
+}
+
+.tree-grid-empty-steps strong {
+  color: var(--color-slate-700);
+}
+
 /* Directory line in the header (visible on the Browse tab only) */
 .header-dir {
   display: flex;
@@ -1038,7 +1053,10 @@ body {
 }
 
 .header-dir .dir-bar-hint {
-  display: none;
+  display: inline;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.75rem;
+  white-space: nowrap;
 }
 
 .app-header-title {

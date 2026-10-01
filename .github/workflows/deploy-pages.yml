@@ -1,0 +1,84 @@
+name: Deploy to GitHub Pages
+
+# Zero-config on purpose:
+# - this repo is checked out as `encfs-tree-browser/`, the codec as `encfs-names-ts/`
+#   (siblings), which is exactly what the file:../encfs-names-ts dependency resolves to
+# - the codec is fetched from `<owner>/encfs-names-ts` (must be a PUBLIC repo under the
+#   same GitHub account); override with the repo variable ENCFS_NAMES_REPO if renamed
+# - Settings → Pages → Source: "GitHub Actions"
+# - encfs-tree-browser/conf/ is gitignored: drop-in configs are local only unless
+#   force-added (`git add -f conf/xxxx.encfs6.xml`)
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+        with:
+          path: encfs-tree-browser
+
+      - name: Checkout codec (file:../encfs-names-ts — same owner, or set vars.ENCFS_NAMES_REPO)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.ENCFS_NAMES_REPO || format('{0}/encfs-names-ts', github.repository_owner) }}
+          path: encfs-names-ts
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            encfs-tree-browser/package-lock.json
+            encfs-names-ts/package-lock.json
+
+      - name: Build codec package
+        working-directory: encfs-names-ts
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Install app dependencies
+        working-directory: encfs-tree-browser
+        run: npm ci --no-audit --no-fund
+
+      - name: Build standalone bundle
+        working-directory: encfs-tree-browser
+        run: npm run build:standalone
+
+      - name: Prepare Pages artifact
+        run: |
+          test -s encfs-tree-browser/dist-standalone/encfs-browser.html
+          mkdir -p /tmp/pages
+          cp encfs-tree-browser/dist-standalone/encfs-browser.html /tmp/pages/index.html
+          cp encfs-tree-browser/dist-standalone/favicon.svg /tmp/pages/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/pages
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
