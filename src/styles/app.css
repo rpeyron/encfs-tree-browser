@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --color-indigo-600: #4f46e5;
   --color-blue-600: #2563eb;
   --color-slate-50: #f8fafc;
@@ -421,7 +421,7 @@ body {
 .tree-children {
   background-color: #f9fafb;
   border-left: 2px solid var(--color-slate-200);
-  /* indentation comes from the per-level row padding only — no extra shift */
+  /* indentation comes from the per-level row padding only â€” no extra shift */
   padding-left: 0;
 }
 
@@ -476,8 +476,8 @@ body {
 }
 
 .config-cluster .config-select {
-  min-width: 170px;
-  max-width: 200px;
+  min-width: 112px;
+  max-width: 134px;
   padding: 7px 9px;
   font-size: 0.8rem;
   border-radius: 6px;
@@ -485,7 +485,7 @@ body {
 
 .config-cluster .config-password {
   min-width: 0;
-  width: 140px;
+  width: 94px;
   padding: 7px 9px;
   font-size: 0.8rem;
   border-radius: 6px;
@@ -709,6 +709,17 @@ body {
   background: var(--color-surface);
 }
 
+.step-path {
+  width: 240px;
+  padding: 7px 9px;
+  border: 1px solid var(--color-slate-300);
+  border-radius: 6px;
+  font-size: 0.83rem;
+  font-family: 'Courier New', monospace;
+  background: var(--color-surface);
+  color: var(--color-slate-800);
+}
+
 .step-btn {
   background: var(--color-surface);
   border: 1px solid var(--color-slate-300);
@@ -746,15 +757,6 @@ body {
   background: var(--color-indigo-50);
   border-color: var(--color-indigo-500);
   color: var(--color-indigo-700);
-}
-
-.step-dirname {
-  font-size: 0.8rem;
-  color: var(--color-slate-600);
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .hidden-input {
@@ -1032,6 +1034,56 @@ body {
   color: var(--color-slate-700);
 }
 
+/* Stop agent â€” sits right of Scan; translucent header background + readable red */
+.stop-agent-btn {
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(248, 113, 113, 0.7);
+  color: #fca5a5;
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.stop-agent-btn:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.22);
+  border-color: #fca5a5;
+  color: #fecaca;
+}
+
+.stop-agent-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Encoded â†” decoded toggle (replaces the mode dropdown) */
+.mode-toggle {
+  background: var(--color-surface);
+  color: var(--color-slate-800);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  padding: 0 10px;
+  height: 30px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.mode-toggle:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.75);
+  background: var(--color-slate-50);
+}
+
+.mode-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Directory line in the header (visible on the Browse tab only) */
 .header-dir {
   display: flex;
@@ -1039,6 +1091,80 @@ body {
   gap: 8px;
   flex-wrap: nowrap;
   min-width: 0;
+  position: relative;
+}
+
+/* In-page disk explorer (local agent) â€” popover under the header line */
+.agent-explorer-wrap {
+  position: relative;
+}
+
+.agent-explorer {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  background: var(--color-surface);
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+  padding: 10px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--color-slate-800);
+}
+
+.agent-explorer-bar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.agent-explorer-path {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+.agent-explorer-list {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 6px;
+  background: var(--color-slate-50);
+}
+
+.agent-explorer-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 6px 10px;
+  font-size: 0.83rem;
+  color: var(--color-slate-700);
+  cursor: pointer;
+}
+
+.agent-explorer-item:hover {
+  background: var(--color-indigo-50);
+  color: var(--color-indigo-700);
+}
+
+.agent-explorer-note {
+  padding: 10px;
+  font-size: 0.8rem;
+  color: var(--color-slate-500);
+}
+
+.agent-explorer-choose {
+  width: 100%;
+  font-size: 0.85rem;
 }
 
 .header-dir .dir-bar {
@@ -1067,18 +1193,9 @@ body {
   flex-shrink: 0;
 }
 
-.header-dir .step-dirname {
-  color: var(--color-white);
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  border-radius: 6px;
-  padding: 5px 9px;
-  font-size: 0.8rem;
-  max-width: 130px;
-}
-
 .header-dir .scan-button {
   width: auto;
+  white-space: nowrap;
   padding: 7px 16px;
   font-size: 0.85rem;
   font-weight: 600;
@@ -1157,7 +1274,7 @@ body {
   font-size: 0.8rem;
 }
 
-/* Dark mode — follows the user's system preference */
+/* Dark mode â€” follows the user's system preference */
 @media (prefers-color-scheme: dark) {
   :root {
     --color-surface: #1e293b;
@@ -1289,21 +1406,9 @@ body {
 .header-dir .step-btn,
 .header-dir .step-select,
 .header-dir .step-mount,
-.header-dir .scan-button,
-.header-dir .step-dirname {
-  height: 30px;
-  box-sizing: border-box;
-  padding-top: 0;
-  padding-bottom: 0;
-}
-
-.app-tab {
-  padding-left: 16px;
-  padding-right: 16px;
-}
-
 .config-cluster .config-select,
 .config-cluster .config-password {
+  box-sizing: border-box;
   padding-left: 9px;
   padding-right: 9px;
 }
@@ -1320,12 +1425,4 @@ body {
   padding-right: 14px;
 }
 
-.header-dir .step-dirname {
-  display: inline-flex;
-  align-items: center;
-  padding-left: 9px;
-  padding-right: 9px;
-}
-
-
-
+.header-dir 

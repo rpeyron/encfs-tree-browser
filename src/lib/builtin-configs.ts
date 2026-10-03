@@ -63,6 +63,7 @@ export function defaultStepFor(_config: EncfsConfiguration): DirBindingStep {
     label: 'Directory',
     mountPoint: '/',
     mode: 'encoded',
+    source: 'fsa',
     dirName: '',
   };
 }

@@ -1,9 +1,15 @@
 import type { DirBindingStep, NameMode } from '../types/index';
 import { DirectoryPicker } from './DirectoryPicker';
+import { AgentExplorer } from './AgentExplorer';
+import type { AgentInfo } from '../lib/agent-client';
 
 interface DirectorySetupProps {
   step: DirBindingStep;
+  /** Local agent info when reachable (Rust exe or PowerShell twin). */
+  agent: AgentInfo | null;
   onDirectory: (handle: FileSystemDirectoryHandle) => void;
+  /** Absolute path chosen in the agent explorer. */
+  onAgentPath: (path: string) => void;
   onChange: (step: DirBindingStep) => void;
   onError: (error: string) => void;
   disabled?: boolean;
@@ -11,54 +17,64 @@ interface DirectorySetupProps {
 
 export function DirectorySetup({
   step,
+  agent,
   onDirectory,
+  onAgentPath,
   onChange,
   onError,
   disabled,
 }: DirectorySetupProps) {
-  // Full path of the selected folder itself (no mount prefix — that shows in the tree).
-  const selectedPath = step.dirName ? `/${step.dirName}` : '';
+  const isAgent = step.source === 'agent';
+
+  // Full path of the selected folder itself (mount prefix lives in the tree).
+  const selectedPath = isAgent
+    ? step.dirName
+    : step.dirName
+      ? `/${step.dirName}`
+      : '';
 
   return (
     <div className="dir-bar">
       <div className="dir-bar-source">
-        <DirectoryPicker
-          onDirectorySelected={onDirectory}
-          onError={onError}
-          isLoading={disabled}
-          label="📂 Select directory…"
-          title={
-            'Select a folder — in the native picker press Ctrl+L (or Alt+D) and paste\n' +
-            'any path, including hidden folders.'
-          }
-        />
-        {step.dirName ? (
-          <span className="step-dirname" title={selectedPath}>📁 {selectedPath}</span>
+        {agent ? (
+          <AgentExplorer agent={agent} step={step} onChoose={onAgentPath} />
         ) : (
-          <span className="dir-bar-hint">
-            Ctrl+L / Alt+D → paste any path (hidden folders too)
-          </span>
+          <>
+            <DirectoryPicker
+              onDirectorySelected={onDirectory}
+              onError={onError}
+              isLoading={disabled}
+              label={step.dirName ? `📁 ${selectedPath}` : '📂 Select folder…'}
+              title={step.dirName ? selectedPath : 'Select the folder to display'}
+            />
+            {!step.dirName && (
+              <span className="dir-bar-hint">choose the folder to display</span>
+            )}
+          </>
         )}
       </div>
-      <select
-        className="step-select"
-        value={step.mode}
-        onChange={(e) => onChange({ ...step, mode: e.target.value as NameMode })}
+      <button
+        type="button"
+        className="mode-toggle"
+        onClick={() =>
+          onChange({ ...step, mode: (step.mode === 'encoded' ? 'decoded' : 'encoded') as NameMode })
+        }
         disabled={disabled}
-        title="What is on disk for this directory"
+        title="Toggle what is on disk: encoded ↔ decoded"
       >
-        <option value="encoded">🔒 Encoded</option>
-        <option value="decoded">🔓 Decoded</option>
-      </select>
-      <input
-        type="text"
-        className="step-mount"
-        value={step.mountPoint}
-        onChange={(e) => onChange({ ...step, mountPoint: e.target.value })}
-        placeholder="/ (root)"
-        disabled={disabled}
-        title="Prefix in front of the tree root (on-disk namespace). On chainedNameIV volumes with a mount set, the root shows only the mount path."
-      />
+        {step.mode === 'encoded' ? '🔒 Encoded' : '🔓 Decoded'} ⇄
+      </button>
+      {!isAgent && (
+        <input
+          type="text"
+          className="step-mount"
+          value={step.mountPoint}
+          onChange={(e) => onChange({ ...step, mountPoint: e.target.value })}
+          placeholder="/ (root)"
+          disabled={disabled}
+          title="Prefix in front of the tree root (decoded path). On chainedNameIV volumes with a mount set, the root shows only the mount path."
+        />
+      )}
     </div>
   );
 }

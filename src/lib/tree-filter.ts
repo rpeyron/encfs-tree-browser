@@ -3,8 +3,8 @@ import type { NameMode, TreeNode } from '../types/index';
 export function filterNodes(nodes: TreeNode[], query: string, primary: NameMode): TreeNode[] {
   const q = query.toLowerCase();
   const match = (n: TreeNode) => {
-    const main = primary === 'encoded' ? n.nameDecoded : n.nameEncoded;
-    const alt = primary === 'encoded' ? n.nameEncoded : n.nameDecoded;
+    const main = primary === 'encoded' ? n.nameEncoded : n.nameDecoded;
+    const alt = primary === 'encoded' ? n.nameDecoded : n.nameEncoded;
     return main.toLowerCase().includes(q) || alt.toLowerCase().includes(q);
   };
   const walk = (list: TreeNode[]): TreeNode[] =>
@@ -19,9 +19,9 @@ export function filterNodes(nodes: TreeNode[], query: string, primary: NameMode)
   return walk(nodes);
 }
 
-/** Displayed (primary) name of a row — same rule TreeGrid uses. */
+/** Displayed (primary) name of a row — same rule TreeGrid uses (on-disk side first). */
 export const displayPrimaryName = (n: TreeNode, primary: NameMode): string =>
-  primary === 'encoded' ? n.nameDecoded : n.nameEncoded;
+  primary === 'encoded' ? n.nameEncoded : n.nameDecoded;
 
 /** Sort siblings alphabetically by displayed name, recursively (root and every directory). */
 export function sortTree(nodes: TreeNode[], primary: NameMode): TreeNode[] {

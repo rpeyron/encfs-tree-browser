@@ -33,25 +33,27 @@ describe('filterNodes', () => {
 });
 
 describe('sortTree', () => {
-  it('sorts siblings by the displayed primary name, recursively', () => {
+  it('sorts siblings by the displayed (on-disk) primary name, recursively', () => {
     const tree = [
       node('file_b', 'zzz-b'),
       node('dir_a', 'aaa-dir', [node('zeta', 'a-zeta'), node('alpha', 'z-alpha')]),
       node('File_A', 'aaa-file'),
     ];
 
-    const sorted = sortTree(tree, 'encoded'); // primary encoded → displayed = decoded
-    expect(sorted.map((n) => n.nameDecoded)).toEqual(['dir_a', 'File_A', 'file_b']);
-    expect(sorted[0].children!.map((n) => n.nameDecoded)).toEqual(['alpha', 'zeta']);
+    // primary 'encoded' → first line = encoded (on-disk) names
+    const sorted = sortTree(tree, 'encoded');
+    expect(sorted.map((n) => n.nameEncoded)).toEqual(['aaa-dir', 'aaa-file', 'zzz-b']);
+    expect(sorted[0].children!.map((n) => n.nameEncoded)).toEqual(['a-zeta', 'z-alpha']);
 
-    const sortedByCipher = sortTree(tree, 'decoded'); // displayed = encoded
-    expect(sortedByCipher.map((n) => n.nameEncoded)).toEqual(['aaa-dir', 'aaa-file', 'zzz-b']);
+    // primary 'decoded' → first line = decoded names
+    const sortedByDecoded = sortTree(tree, 'decoded');
+    expect(sortedByDecoded.map((n) => n.nameDecoded)).toEqual(['dir_a', 'File_A', 'file_b']);
   });
 
-  it('displayPrimaryName follows the same rule as TreeGrid', () => {
+  it('displayPrimaryName shows the on-disk side first', () => {
     const n = node('plain', 'cipher');
-    expect(displayPrimaryName(n, 'encoded')).toBe('plain');
-    expect(displayPrimaryName(n, 'decoded')).toBe('cipher');
+    expect(displayPrimaryName(n, 'encoded')).toBe('cipher');
+    expect(displayPrimaryName(n, 'decoded')).toBe('plain');
   });
 });
 

@@ -35,17 +35,31 @@ Technical constraints, architecture and code style live in [requirements-technic
 - **Single directory** (Browse tab, shown only when the browser supports the File
   System Access API): the directory line sits in the header right of the Browse tab and
   defines:
-  - **Select directory…** button (File System Access API)
-  - a **mode**: whether names on disk are encoded or decoded — **auto-detected right
-    after a directory is picked** (decode + re-encode round-trip on the root names; no
-    codec / password → keeps the previous choice, set it manually)
+  - **Select folder…** button (File System Access API) — once chosen, **the button
+    label becomes the selected full path** (`📁 /dir_1`); there is no separate path
+    display
+  - **or the local agent** (auto-detected while running: `encfs-agent.exe` or the
+    PowerShell twin `encfs-agent.ps1`): **« 📂 Browse disk… »** opens an in-page
+    explorer (drive dropdown **with volume labels when the OS reports them**,
+    typed path for UNC/mounts, subfolder navigation, **⬇ Use this directory**) —
+    reads any folder the OS user can access and knows the **absolute path**; the
+    trigger button label becomes the chosen path. **While the agent is reachable the
+    File System Access picker is hidden.** Clicking the **Browse tab** re-probes the
+    agent; if it no longer answers, the UI falls back to the browser picker (same
+    state as a cold start)
+  - a **mode toggle button** (🔒 Encoded ⇄ 🔓 Decoded) — replaces the old dropdown;
+    the mode is **auto-detected right after a directory is picked/loaded**
+    (decode + re-encode round-trip on the root names; no codec / password → keeps the
+    previous choice, set it manually)
   - a **mount point** — **always visible**, typed as a **decoded path**, used as a
     **prefix in front of the tree root** (e.g. mount `/data/vault` → decoded root
     `/data/vault/dir_1`); in the **encoded representation every prefix level is
     encoded** too (chained IVs from the volume root). On a `chainedNameIV` volume
     with a mount set, the root shows **only the mount path** (synthetic graft, both
     representations derived) and the mount also seeds the chained-IV walk
-  - a **Scan** button right after the mode/mount controls
+  - a **Scan** button right after the mode/mount controls; **⏹ Stop** sits right of
+    Scan (translucent background, **red label**) — it shuts the agent down and
+    restores the exact cold-start state (default step, browser picker)
 - **Sample path lists**: built-in samples ship with the EncFS 1.9.5 fixture file list
   (`src/assets/configs/*.samples*.txt`), loadable in the Convert tab in the form
   matching the selected direction (decoded list for Encode, encoded list for Decode)
@@ -72,10 +86,12 @@ Technical constraints, architecture and code style live in [requirements-technic
 - **On-Demand Expansion**: toolbar actions **▾ Expand 1 level**, **▾▾ Expand all**,
   **▴ Collapse all**
 - **Bidirectional Naming**:
-  - If directory is encoded: show decoded names, with encoded variant visible
-  - If directory is decoded: show encoded names, with decoded variant visible
-  - **Swap toggle** (⇄) flips which of encoded/decoded is the primary column,
-    without re-scanning (preference persisted in localStorage)
+  - **Primary column = the representation that matches the names on disk** —
+    auto-set after a scan, after mode auto-detection and on every mode toggle
+    (dir encoded → encoded names first; dir decoded → decoded names first)
+  - **Alternate**: the other representation stays visible on the row
+  - **Swap toggle (⇄)** flips which representation is primary (label shows the other
+    side), without re-scanning (preference persisted in localStorage)
 - **Sort toggle (A→Z Sort)**: alphabetical sort of names at the root and inside every
   directory, by the **displayed primary name** (decoded or encoded following the
   current display); persisted in localStorage
@@ -90,20 +106,17 @@ Technical constraints, architecture and code style live in [requirements-technic
 
 ### 3. Columns & Display
 **Primary columns:**
-- **Name** (with icon): Main filename with file/folder icon (📁 or 📄)
-  - Decoded if mode = "encoded"
-  - Encoded if mode = "decoded"
-- **Alternate**: The other representation (encoded or decoded)
+- **Name** (with icon): main filename with file/folder icon (📁 or 📄) —
+  the **on-disk representation** (encoded name if the directory is encoded, decoded
+  name if it is decoded)
+- **Alternate**: the other representation
 - **Size**: File size formatted (KB, MB, GB)
 - **Modified**: Last modified date (relative format: "2h ago", "3 days ago")
-- **Actions**: Copy buttons (main path and alternate path)
+- **Actions**: Copy buttons (**📋🔒** encoded path, **📋🔓** decoded path)
 
-**Column Management:**
-- Show/hide columns via dropdown menu
-- Reorder columns by dragging header
-- Resize columns by dragging column border
-- Preferences persist in localStorage (`encfs-tree-prefs`); directory handles persist
-  in IndexedDB
+**Columns** (fixed set, no reordering/resize): Name (primary), Alternate, Size,
+Modified, Actions — **Preferences persist** in localStorage (`encfs-tree-prefs`,
+primary column + sort); directory handles persist in IndexedDB
 
 ### 4. Navigation & Interaction
 - **Expand/Collapse**:
@@ -174,37 +187,42 @@ Technical constraints, architecture and code style live in [requirements-technic
   - Special characters
 
 ### 7. View Options & Preferences
-- **Statistics Panel** (optional): Show totals (file count, folder count, total size, max depth)
-- **Load Full Tree**: Option to pre-load entire tree recursively
 - **Persistence** (localStorage): active configuration id, user configurations, directory
   binding per configuration, display preferences (primary column, sort), optionally the
   password (opt-in, cleartext)
+- *Roadmap (not implemented): statistics panel (totals/depth)*
 
 ### 8. Error States & Recovery
 - **Invalid Config**: Show error with option to re-upload
 - **Wrong Password**: Show error, allow re-entry, continue with partial results
 - **Permission Denied**: Show instructions and retry option
-- **Decode Errors**: Mark affected items, show count of errors, suggest password review
+- **Decode Errors**: a failed conversion keeps the raw name on that row (one bad name
+  never fails the scan); batch rows report per-line errors and a total count
 - **Partial Failures**: Continue scanning even if individual items fail
 
 ### 9. Standalone Single-File Build
 - `npm run build:standalone` bundles the whole app (JS, CSS, sample `.encfs6.xml`
-  configs) into one self-contained `dist-standalone/encfs-browser.html`
+  configs, favicon as a `data:` URI) into one self-contained
+  `dist-standalone/encfs-browser.html` — **self-compressing**: JS/CSS are gzipped and
+  inflated at boot via the native `DecompressionStream` (~42 KB instead of ~97 KB)
 - Runs offline from disk (`file://`), no server required
 
 ## User Flows
 
 ### Flow 1: Browse Encrypted Directory (Chrome/Edge)
-1. Header: pick a configuration in the dropdown (samples first entry is user list,
-   samples last, "Add configuration…" opens the modal)
+1. Header: pick a configuration in the dropdown (last used one is restored; first run
+   shows the "Select or add configuration…" placeholder)
 2. Enter the password (optionally check "Remember password" in the modal)
-3. Browse tab: **📂 Select directory…** (tip: Ctrl+L types any path, incl. hidden
-   folders), set mode and an optional mount prefix, click **🔍 Scan**
-4. Decoded names + encoded alternates; expand, search, sort, swap, copy 📋🔒/📋🔓
+3. Browse tab: **📂 Select folder…** (the button label shows the chosen path) **or** —
+   when the local agent runs — **📂 Browse disk…** and navigate to the directory; the
+   mode is auto-detected, set mount if needed, click **🔍 Scan**
+4. On-disk names first + the other representation below; expand, search, sort, swap,
+   copy 📋🔒/📋🔓
 
 ### Flow 2: Swap / Sort Display
-1. Tree loaded from a directory (either mode)
-2. Toolbar **⇄ Swap** flips which representation is the primary column, no re-scan
+1. Tree loaded from a directory: the **primary column matches the names on disk**
+   (auto-set by the scan, the mode detection and every mode toggle)
+2. Toolbar **⇄ Swap** flips the primary column, no re-scan (label shows the other side)
 3. Toolbar **A→Z Sort** toggles alphabetical ordering by the displayed name at the
    root and inside every directory
 
@@ -217,7 +235,7 @@ Technical constraints, architecture and code style live in [requirements-technic
 ### Flow 4: Search & Filter
 1. User has loaded directory tree
 2. User enters search term in search bar
-3. Results filter in real-time (debounced)
+3. Results filter in real-time
 4. Matching items highlighted
 5. User can copy matching path directly
 
@@ -228,12 +246,11 @@ Technical constraints, architecture and code style live in [requirements-technic
 
 ## Out of Scope
 
-- Modifying files or directories
-- Network/cloud EncFS mounts beyond what the browser can open
+- Modifying files or directories (the local agent is read-only as well)
+- Network/cloud mounts the OS user cannot read
 - Encryption/decryption of file contents (only filename display)
 - Multi-user/collaboration features
 - Full EncFS configuration editing
-- Guessing the encoded/decoded mode (the user always specifies it)
 
 ## Assumptions
 

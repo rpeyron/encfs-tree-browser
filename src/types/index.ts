@@ -34,10 +34,12 @@ export interface EncfsConfiguration {
 export interface DirBindingStep {
   id: string;
   label: string;
-  /** Where this directory connects in the tree ('/' = root). Expressed in the directory's on-disk namespace. */
+  /** Where this directory connects in the tree ('/' = root). Decoded path, prefixed in front of the root. */
   mountPoint: string;
   /** What is on disk for this directory. */
   mode: NameMode;
+  /** 'fsa': browser picker (dirName = folder name). 'agent': local agent (dirName = absolute path). */
+  source?: 'fsa' | 'agent';
   dirName: string;
 }
 

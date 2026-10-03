@@ -24,8 +24,9 @@ export function TreeGrid({ nodes, primary, expanded, loading, selectedId, onSele
     const canExpand = node.isDir;
     const childrenLoaded = node.children && node.children.length > 0;
     const icon = isRoot ? null : canExpand ? (isExpanded ? '📂' : '📁') : '📄';
-    const name = primary === 'encoded' ? node.nameDecoded : node.nameEncoded;
-    const alternate = primary === 'encoded' ? node.nameEncoded : node.nameDecoded;
+    // primary = first line = the representation that matches the names on disk
+    const name = primary === 'encoded' ? node.nameEncoded : node.nameDecoded;
+    const alternate = primary === 'encoded' ? node.nameDecoded : node.nameEncoded;
     const indent = depth * INDENT_PER_LEVEL;
     const childrenVisible = isRoot || isExpanded;
 

@@ -1,7 +1,6 @@
 interface DirectoryPickerProps {
   onDirectorySelected: (handle: FileSystemDirectoryHandle) => void;
   onError: (error: string) => void;
-  selectedPath?: string;
   isLoading?: boolean;
   label?: string;
   title?: string;
@@ -10,9 +9,8 @@ interface DirectoryPickerProps {
 export function DirectoryPicker({
   onDirectorySelected,
   onError,
-  selectedPath,
   isLoading,
-  label = 'Select directory',
+  label = 'Select folder',
   title,
 }: DirectoryPickerProps) {
   const handlePickDirectory = async () => {
@@ -24,17 +22,14 @@ export function DirectoryPicker({
       onError(
         error instanceof Error
           ? error.message
-          : 'Directory picker unavailable — use a listing file instead',
+          : 'Directory picker unavailable — start the local agent or use another browser',
       );
     }
   };
 
   return (
-    <>
-      <button type="button" className="step-btn" onClick={handlePickDirectory} disabled={isLoading} title={title}>
-        {label}
-      </button>
-      {selectedPath && <span className="step-dirname" title={selectedPath}>📁 {selectedPath}</span>}
-    </>
+    <button type="button" className="step-btn" onClick={handlePickDirectory} disabled={isLoading} title={title}>
+      {label}
+    </button>
   );
 }

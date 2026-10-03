@@ -34,6 +34,8 @@ export async function directoryDisplayNames(
   onDiskName: string,
   mode: NameMode,
 ): Promise<{ nameDecoded: string; nameEncoded: string }> {
+  // Drive root / empty segment: nothing to convert, keep it empty.
+  if (!onDiskName) return { nameDecoded: '', nameEncoded: '' };
   try {
     if (mode === 'encoded') {
       const { plaintext } = await codec.decryptName(onDiskName, 0n);

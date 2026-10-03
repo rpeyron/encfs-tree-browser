@@ -27,3 +27,6 @@ conf/
 *.njsproj
 *.sln
 *.sw?
+
+
+agent/target/

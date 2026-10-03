@@ -6,7 +6,8 @@ import { BatchConvert } from './components/BatchConvert';
 import { TreeToolbar } from './components/TreeToolbar';
 import { TreeGrid } from './components/TreeGrid';
 import { EncfsNameCodec } from 'encfs-filename-codec';
-import { scanDirectory } from './lib/fs-scanner';
+import { scanDirectory, type FSEntry } from './lib/fs-scanner';
+import { probeAgent, agentList, joinAgentPath, shutdownAgent, type AgentInfo } from './lib/agent-client';
 import { buildTreeLevel, buildFullPaths, findNodeById } from './lib/tree-builder';
 import { graftSteps, prefixIds, relPathOf, normalizeMount, directoryDisplayNames, wrapDirectoryRoot } from './lib/chain';
 import { filterNodes, sortTree, flattenVisible } from './lib/tree-filter';
@@ -28,7 +29,6 @@ import {
 } from './lib/config-store';
 import { saveDirHandle, loadDirHandle, dirHandleKey } from './lib/persist-dir';
 import type {
-  AppPrefs,
   DirBindingStep,
   EncfsConfiguration,
   NameMode,
@@ -87,6 +87,21 @@ export function App() {
   const [codec, setCodec] = useState<EncfsNameCodec | null>(null);
   const codecKeyRef = useRef('');
   const fsaHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
+  const [agent, setAgent] = useState<AgentInfo | null>(null);
+
+  // Probe the local agent (same origin when served by it, else 8765-8785).
+  useEffect(() => {
+    let alive = true;
+    void probeAgent().then((info) => {
+      if (alive) {
+        setAgent(info);
+        if (info) console.log('[agent] detected', { base: info.base || '(same origin)', roots: info.roots });
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const [nodes, setNodes] = useState<TreeNode[]>([]);
   const nodesRef = useRef<TreeNode[]>(nodes);
@@ -109,7 +124,7 @@ export function App() {
     setRemember(Boolean(cfg.rememberedPassword));
     const raw = loadSteps(activeId)[0];
     // drop steps persisted by the removed listing feature
-    const legacy = raw as (DirBindingStep & { source?: string }) | undefined;
+    const legacy = raw as unknown as { source?: string } | undefined;
     const restored = raw && legacy?.source !== 'listing' ? raw : defaultStepFor(cfg);
     if (restored !== raw) saveSteps(activeId, [restored]);
     setStep(restored);
@@ -151,6 +166,11 @@ export function App() {
   };
 
   const handleStepChange = (next: DirBindingStep) => {
+    // Manual mode toggle: primary follows the on-disk representation.
+    if (step && next.mode !== step.mode) {
+      setPrimary(next.mode);
+      savePrefs({ ...loadPrefs(), displayPrimary: next.mode });
+    }
     setStep(next);
     if (activeId) saveSteps(activeId, [next]);
   };
@@ -162,6 +182,9 @@ export function App() {
       if (activeId) saveSteps(activeId, [next]);
       return next;
     });
+    // Auto-detection: show the on-disk representation first.
+    setPrimary(mode);
+    savePrefs({ ...loadPrefs(), displayPrimary: mode });
   };
 
   /** Detect the mode over the directory root after a pick; silent when codec/password unavailable. */
@@ -195,7 +218,7 @@ export function App() {
     }
     console.log('[directory] picked', { name: handle.name, stepId: step.id });
     fsaHandleRef.current = handle;
-    handleStepChange({ ...step, dirName: handle.name });
+    handleStepChange({ ...step, source: 'fsa', dirName: handle.name });
     setError('');
     // best effort: an in-memory handle already works for this session
     if (activeId) {
@@ -259,51 +282,164 @@ export function App() {
     setModal(null);
   };
 
+  /** Agent path loaded (Browse → 🖥 Load path): sets step, auto-detects the mode. */
+  const handleAgentPathLoaded = async (path: string) => {
+    if (!step) {
+      setError('Select a configuration first');
+      return;
+    }
+    if (!agent) {
+      setError('Local agent not reachable — start encfs-agent.exe');
+      return;
+    }
+    console.log('[directory] agent path', { path, stepId: step.id });
+    handleStepChange({ ...step, source: 'agent', dirName: path });
+    setError('');
+    try {
+      const c = await ensureCodec();
+      const rootEntries = await agentList(agent.base, path);
+      const mode = await detectNameMode(c, rootEntries.map((e) => e.name));
+      if (mode) applyDetectedMode(step.id, mode);
+      const sep = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+      const parent = sep > 0 ? path.slice(0, sep).replace(/\\/g, '/') : '';
+      const base = sep >= 0 ? path.slice(sep + 1) : path;
+      const names = await directoryDisplayNames(c, base, mode ?? step.mode);
+      console.log('[directory] selection', {
+        name: path,
+        detectedMode: mode ?? '(unchanged)',
+        fullPathDecoded: `${parent}/${names.nameDecoded}`,
+        fullPathEncoded: `${parent}/${names.nameEncoded}`,
+        entries: rootEntries.length,
+      });
+    } catch (err) {
+      console.log('[directory] selection (mode not detected)', {
+        name: path,
+        reason: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  /** Stop the local agent (server exits) and fall back to the browser picker. */
+  /** Back to the exact state of a cold start without an agent. */
+  const resetToFreshStep = () => {
+    const cfg = configs.find((c) => c.id === activeId);
+    if (cfg) {
+      const fresh = defaultStepFor(cfg);
+      saveSteps(activeId, [fresh]);
+      setStep(fresh);
+    } else {
+      setStep(null);
+    }
+    setNodes([]);
+    setExpanded({});
+    setSelectedId(null);
+    setCodec(null);
+    codecKeyRef.current = '';
+  };
+
+  const handleStopAgent = async () => {
+    if (!agent) return;
+    const ok = await shutdownAgent(agent.base);
+    if (!ok) {
+      setError('Shutdown request failed — is the agent still running?');
+      return;
+    }
+    console.log('[agent] stopped — back to the browser picker');
+    setAgent(null);
+    if (step?.source === 'agent') {
+      // The loaded tree came from the agent: reset to a fresh FSA directory step.
+      resetToFreshStep();
+    }
+    setError('');
+  };
+
   const handleScanClick = async () => {
     if (!step) {
-      setError('Select a directory first');
+      setError('Select a folder first');
       return;
     }
     setScanning(true);
     setError('');
     try {
       const c = await ensureCodec();
-      const handle = await resolveHandle();
-      if (!handle) throw new Error('Directory missing — select it again');
+      const viaAgent = step.source === 'agent';
       const mount = normalizeMount(step.mountPoint);
       const isChained = activeConfig ? hasChainedNameIv(activeConfig.xml) : false;
       // Chained volume with a mount point: the mount path (synthetic graft) is the
       // only root shown. Otherwise the root row is the selected directory itself,
       // its full path optionally prefixed by the mount field.
-      const useGraft = isChained && mount !== '';
+      const useGraft = isChained && mount !== '' && !viaAgent;
       const pre = await prefixNamespaces(c, mount);
       // On-disk namespace of the mount for the chained IV walk (dir mode decides
       // whether the mount must be encoded or is already plain).
       const ivBase = useGraft ? (step.mode === 'encoded' ? pre.encoded : pre.decoded) : '';
-      const entries = await scanDirectory(handle);
+
+      let entries: FSEntry[];
+      if (viaAgent) {
+        if (!agent) throw new Error('Local agent not reachable — start encfs-agent.exe');
+        entries = await agentList(agent.base, step.dirName);
+      } else {
+        const handle = await resolveHandle();
+        if (!handle) throw new Error('Directory missing — select it again');
+        entries = await scanDirectory(handle);
+      }
+
       const tree = await buildTreeLevel(entries, c, step.mode, '', ivBase);
       let rootNodes: TreeNode[];
       if (!useGraft) {
-        const names = await directoryDisplayNames(c, step.dirName, step.mode);
-        const wrapperDecoded = `${pre.decoded}/${names.nameDecoded}`;
-        const wrapperEncoded = `${pre.encoded}/${names.nameEncoded}`;
+        let names: { nameDecoded: string; nameEncoded: string };
+        let prefixDec: string;
+        let prefixEnc: string;
+        let onDiskName: string;
+        if (viaAgent) {
+          // Agent path is absolute: parent part is outside the volume (kept raw in
+          // both representations), only the final segment is a volume name.
+          const sep = Math.max(step.dirName.lastIndexOf('/'), step.dirName.lastIndexOf('\\'));
+          const parent = sep > 0 ? step.dirName.slice(0, sep).replace(/\\/g, '/') : '';
+          const base = sep >= 0 ? step.dirName.slice(sep + 1) : step.dirName;
+          names = await directoryDisplayNames(c, base, step.mode);
+          prefixDec = parent;
+          prefixEnc = parent;
+          onDiskName = base;
+        } else {
+          names = await directoryDisplayNames(c, step.dirName, step.mode);
+          prefixDec = pre.decoded;
+          prefixEnc = pre.encoded;
+          onDiskName = step.dirName;
+        }
+        const wrapperDecoded = `${prefixDec}/${names.nameDecoded}`;
+        const wrapperEncoded = `${prefixEnc}/${names.nameEncoded}`;
         const withPaths = buildFullPaths(tree, '', wrapperDecoded, wrapperEncoded);
         rootNodes = wrapDirectoryRoot(prefixIds(withPaths, step.id), {
           stepId: step.id,
-          onDiskName: step.dirName,
+          onDiskName,
           ...names,
-          prefixDecoded: pre.decoded,
-          prefixEncoded: pre.encoded,
+          prefixDecoded: prefixDec,
+          prefixEncoded: prefixEnc,
+        });
+        console.log('[scan] root row (full path)', {
+          pathDecoded: wrapperDecoded,
+          pathEncoded: wrapperEncoded,
+          source: viaAgent ? 'agent' : 'fsa',
+          mode: step.mode,
+          entries: entries.length,
         });
       } else {
         rootNodes = prefixIds(buildFullPaths(tree, ivBase, pre.decoded, pre.encoded), step.id);
+        console.log('[scan] mount root (chained)', {
+          mountDecoded: pre.decoded,
+          mountEncoded: pre.encoded,
+          mode: step.mode,
+          entries: entries.length,
+        });
       }
       setNodes(graftSteps([{ mount: useGraft ? mount : '', nodes: rootNodes }]));
       // Keep children visible right after the scan: pre-expand the root row when present
       setExpanded(useGraft ? {} : { [`${step.id}:`]: true });
       setLoading({});
-      const prefs: AppPrefs = loadPrefs();
-      if (!prefs.displayPrimary) setPrimary(step.mode);
+      // Fresh directory: primary = on-disk representation (matches the mode).
+      setPrimary(step.mode);
+      savePrefs({ ...loadPrefs(), displayPrimary: step.mode });
       setView('browse');
     } catch (err) {
       console.error('[scan] failed', err);
@@ -319,13 +455,19 @@ export function App() {
     try {
       const c = await ensureCodec();
       const relPath = relPathOf(nodeId);
-      const handle = await resolveHandle();
-      if (!handle) throw new Error('Directory missing — select it again');
-      let target = handle;
-      for (const part of relPath.split('/').filter(Boolean)) {
-        target = await target.getDirectoryHandle(part);
+      let entries: FSEntry[];
+      if (step.source === 'agent') {
+        if (!agent) throw new Error('Local agent not reachable — start encfs-agent.exe');
+        entries = await agentList(agent.base, joinAgentPath(step.dirName, relPath));
+      } else {
+        const handle = await resolveHandle();
+        if (!handle) throw new Error('Directory missing — select it again');
+        let target = handle;
+        for (const part of relPath.split('/').filter(Boolean)) {
+          target = await target.getDirectoryHandle(part);
+        }
+        entries = await scanDirectory(target);
       }
-      const entries = await scanDirectory(target);
       const loaded = await buildTreeLevel(entries, c, step.mode, relPath, node.path);
       const withPaths = buildFullPaths(loaded, node.path, node.pathDecoded, node.pathEncoded);
       setNodes((prev) => attachChildren(prev, nodeId, prefixIds(withPaths, step.id)));
@@ -347,7 +489,11 @@ export function App() {
   };
 
   const expandOneLevel = async () => {
-    const dirs = nodesRef.current.filter((n) => n.isDir);
+    // Reveal one more depth: expand the visible dirs that are still collapsed
+    // (with the root row wrapper, level-1 dirs are children of the wrapper).
+    const visible = flattenVisible(nodesRef.current, expanded);
+    const dirs = visible.filter((n) => n.isDir && !expanded[n.id]);
+    if (dirs.length === 0) return;
     setExpanded((prev) => ({ ...prev, ...Object.fromEntries(dirs.map((n) => [n.id, true])) }));
     for (const n of dirs) await ensureLoaded(n.id);
   };
@@ -398,6 +544,32 @@ export function App() {
   const filteredNodes = search ? filterNodes(nodes, search, primary) : nodes;
   const visibleNodes = sortNames ? sortTree(filteredNodes, primary) : filteredNodes;
   const canScan = Boolean(activeConfig && password && step?.dirName && !scanning);
+
+  /**
+   * Tab switch: entering Browse re-detects the local agent (it may have been
+   * started/stopped meanwhile); if it no longer answers, fall back to the
+   * browser picker and clear any agent-backed directory.
+   */
+  const handleViewChange = (next: View) => {
+    setView(next);
+    if (next !== 'browse') return;
+    void probeAgent().then((info) => {
+      if (info) {
+        if (!agent) {
+          console.log('[agent] detected', { base: info.base || '(same origin)', roots: info.roots });
+        }
+        setAgent(info);
+        return;
+      }
+      if (agent) {
+        console.log('[agent] no longer answering — back to the browser picker');
+        setAgent(null);
+        if (step?.source === 'agent') {
+          resetToFreshStep();
+        }
+      }
+    });
+  };
 
   // Keyboard navigation — kept in a ref so the listener attaches once per view.
   const kbRef = useRef({ visibleNodes, expanded, selectedId, primary, search, onToggleNode: (_id: string) => {}, setSelectedId });
@@ -571,14 +743,14 @@ export function App() {
         <nav className="app-tabs">
           <button
             className={`app-tab${view === 'convert' ? ' app-tab-active' : ''}`}
-            onClick={() => setView('convert')}
+            onClick={() => handleViewChange('convert')}
           >
             ⚡ Convert
           </button>
           {SUPPORTS_FSA && (
             <button
               className={`app-tab${view === 'browse' ? ' app-tab-active' : ''}`}
-              onClick={() => setView('browse')}
+              onClick={() => handleViewChange('browse')}
             >
               🌳 Browse
             </button>
@@ -588,7 +760,9 @@ export function App() {
           <div className="header-dir">
             <DirectorySetup
               step={step}
+              agent={agent}
               onDirectory={(h) => void handleDirectoryPicked(h)}
+              onAgentPath={(p) => void handleAgentPathLoaded(p)}
               onChange={handleStepChange}
               onError={setError}
               disabled={scanning}
@@ -602,6 +776,17 @@ export function App() {
                 '🔍 Scan'
               )}
             </button>
+            {agent && (
+              <button
+                type="button"
+                className="stop-agent-btn"
+                onClick={() => void handleStopAgent()}
+                disabled={scanning}
+                title="Stop the local agent (shutdown) and switch back to the browser picker"
+              >
+                ⏹ Stop
+              </button>
+            )}
           </div>
         )}
       </header>
@@ -635,17 +820,9 @@ export function App() {
                   <div className="tree-grid-empty-icon">🔒</div>
                   <p>No tree loaded yet</p>
                   <ol className="tree-grid-empty-steps">
-                    <li>Pick a <strong>configuration</strong> in the header (password beside it)</li>
-                    <li>
-                      <strong>📂 Select directory…</strong> — in the picker press{' '}
-                      <strong>Ctrl+L / Alt+D</strong> to type any path (hidden folders too);
-                      the mode is auto-detected
-                    </li>
-                    <li>
-                      Optionally set a <strong>mount prefix</strong> (decoded path shown in
-                      front of the root), then <strong>🔍 Scan</strong>
-                    </li>
-                    <li>Or convert name lists in the <strong>Convert</strong> tab</li>
+                    <li>Select a <strong>configuration</strong> (top left)</li>
+                    <li>Choose a <strong>directory</strong>, then <strong>🔍 Scan</strong></li>
+                    <li>Or convert a list of names in the <strong>⚡ Convert</strong> tab</li>
                   </ol>
                 </div>
               </div>

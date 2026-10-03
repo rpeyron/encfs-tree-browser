@@ -40,6 +40,7 @@ npm run test           # Vitest (must pass: tests/lib/*)
 npm run type-check
 npm run build          # tsc -b && vite build
 npm run build:standalone  # single self-contained dist-standalone/encfs-browser.html
+npm run build:agent       # standalone + agent\target\release\encfs-agent.exe (embedded app)
 ```
 
 Before committing: `npm run test`, `npm run type-check`, `npm run build`, then a manual
