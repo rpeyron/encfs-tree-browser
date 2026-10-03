@@ -3,7 +3,8 @@
   encfs-agent.ps1 - PowerShell twin of the Rust encfs-agent (read-only, localhost only).
   Serves the standalone app + /api/health, /api/roots, /api/list on 127.0.0.1:8765-8785.
 
-  Distribute: this script + encfs-browser.html (+ favicon.svg) in the same folder,
+  Distribute: this script + encfs-browser.html (optionally encfs-browser.html.gz) —
+  the favicon is embedded in this file, nothing else to copy.
   or keep encfs-tree-browser/dist-standalone next to it.
   Run hidden: powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File encfs-agent.ps1
 #>
@@ -24,8 +25,9 @@ if (-not $htmlFile) { throw 'encfs-browser.html not found - put it next to this 
 $gzFile = $htmlFile + '.gz'
 $useGzip = Test-Path -LiteralPath $gzFile
 $htmlBytes = if ($useGzip) { [IO.File]::ReadAllBytes($gzFile) } else { [IO.File]::ReadAllBytes($htmlFile) }
-$iconFile = Join-Path (Split-Path $htmlFile) 'favicon.svg'
-$iconBytes = if (Test-Path -LiteralPath $iconFile) { [IO.File]::ReadAllBytes($iconFile) } else { $null }
+# Favicon embedded in this script (same artwork as public/favicon.svg), never read from disk.
+# To refresh: [Convert]::ToBase64String([IO.File]::ReadAllBytes('..\public\favicon.svg'))
+$iconBytes = [Convert]::FromBase64String('PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0Ij4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiM0ZjQ2ZTUiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMjU2M2ViIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogIDwvZGVmcz4KICA8cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxNCIgZmlsbD0idXJsKCNnKSIvPgogIDxwYXRoIGQ9Ik0yMiAzMHYtOGExMCAxMCAwIDAgMSAyMCAwdjgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSI2IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cmVjdCB4PSIxNyIgeT0iMzAiIHdpZHRoPSIzMCIgaGVpZ2h0PSIyNCIgcng9IjUiIGZpbGw9IiNmZmYiLz4KICA8Y2lyY2xlIGN4PSIzMiIgY3k9IjQwIiByPSIzLjQiIGZpbGw9IiM0ZjQ2ZTUiLz4KICA8cGF0aCBkPSJNMzIgNDIuNXY1IiBzdHJva2U9IiM0ZjQ2ZTUiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=')
 $version = '1.0.0'
 
 function Log([string]$message) {
@@ -107,10 +109,7 @@ while ($true) {
     $query = if ($target.Count -gt 1) { $target[1] } else { '' }
     switch ($path) {
       '/' { Send-Response $stream 200 'text/html; charset=utf-8' $htmlBytes -Gzip:$useGzip }
-      '/favicon.svg' {
-        if ($iconBytes) { Send-Response $stream 200 'image/svg+xml' $iconBytes }
-        else { Send-Response $stream 404 'text/plain' ([Text.Encoding]::UTF8.GetBytes('no favicon')) }
-      }
+      '/favicon.svg' { Send-Response $stream 200 'image/svg+xml' $iconBytes }
       '/api/health' {
         $json = '{"ok":true,"name":"encfs-agent-ps","version":"' + $version + '"}'
         Send-Response $stream 200 'application/json' ([Text.Encoding]::UTF8.GetBytes($json))

@@ -73,9 +73,17 @@ interface RawEntry {
 
 /** One directory level, same FSEntry shape as the File System Access scanner. */
 export async function agentList(base: string, path: string): Promise<FSEntry[]> {
-  const res = await fetch(`${base}/api/list?path=${encodeURIComponent(path)}`, {
-    signal: AbortSignal.timeout(8000),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${base}/api/list?path=${encodeURIComponent(path)}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (err) {
+    // connection refused/reset while talking to the agent
+    throw new Error(
+      `Local agent request failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
   const data = (await res.json().catch(() => ({}))) as {
     error?: string;
     entries?: RawEntry[];

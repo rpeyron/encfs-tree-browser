@@ -1,3 +1,5 @@
+![AI Generated](https://raw.githubusercontent.com/rpeyron/rpeyron/master/images/badges/badge-ia.svg)
+
 # EncFS Tree Browser
 
 A web application for viewing and navigating EncFS-encrypted directory trees with
@@ -71,8 +73,9 @@ then stored in that browser's localStorage for the `file://` origin.
 
 ### Browse tab (Chrome/Edge)
 1. **📂 Select folder…** — once chosen the button label shows the selected full
-   path; or **📂 Browse disk…** when the local agent runs. Set the mode with the
-   **🔒 Encoded ⇄ 🔓 Decoded** toggle and an optional **mount prefix**, then **🔍 Scan**
+   path; or **📂 Browse disk…** when the local agent runs. **Detection and scan run
+   automatically**; adjust the mode (**🔒 Encoded ⇄ 🔓 Decoded** toggle) or an optional
+   **mount prefix** and hit **🔍 Scan** to re-run
 2. The tree opens with a root row for the selected directory showing its **complete
    path** both ways (no icon, no toggle — always open); the **primary column matches
    the names on disk**
@@ -133,7 +136,8 @@ agent\target\release\encfs-agent.exe   # single packed file to distribute (~199 
   fallback: task manager → `encfs-agent.exe` → End task, or
   `taskkill /IM encfs-agent.exe /F`. Same endpoint works on the PowerShell twin
 - **PowerShell twin** (no Rust toolchain): `agent\encfs-agent.ps1` behaves the same
-  — distribute it **with `encfs-browser.html` beside it**, run hidden:
+  — distribute it **with `encfs-browser.html` beside it** (the favicon is **embedded in
+  the script**, nothing else to copy), run hidden:
   `powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File encfs-agent.ps1`
 
 ## Browser Compatibility

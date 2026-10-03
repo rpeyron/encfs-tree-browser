@@ -57,9 +57,12 @@ Technical constraints, architecture and code style live in [requirements-technic
     encoded** too (chained IVs from the volume root). On a `chainedNameIV` volume
     with a mount set, the root shows **only the mount path** (synthetic graft, both
     representations derived) and the mount also seeds the chained-IV walk
-  - a **Scan** button right after the mode/mount controls; **⏹ Stop** sits right of
+  - a **Scan** button (manual re-run); the scan **chains automatically** right after a
+    directory is selected or loaded: mode auto-detection → scan (skipped until the
+    password is available, then use the button). **⏹ Stop** sits right of
     Scan (translucent background, **red label**) — it shuts the agent down and
-    restores the exact cold-start state (default step, browser picker)
+    restores the exact cold-start state (default step, browser picker). API failures
+    (agent list/shutdown, expand) surface as an error banner with the reason
 - **Sample path lists**: built-in samples ship with the EncFS 1.9.5 fixture file list
   (`src/assets/configs/*.samples*.txt`), loadable in the Convert tab in the form
   matching the selected direction (decoded list for Encode, encoded list for Decode)
@@ -214,8 +217,9 @@ primary column + sort); directory handles persist in IndexedDB
    shows the "Select or add configuration…" placeholder)
 2. Enter the password (optionally check "Remember password" in the modal)
 3. Browse tab: **📂 Select folder…** (the button label shows the chosen path) **or** —
-   when the local agent runs — **📂 Browse disk…** and navigate to the directory; the
-   mode is auto-detected, set mount if needed, click **🔍 Scan**
+   when the local agent runs — **📂 Browse disk…** and navigate to the directory;
+   **mode detection and scan run automatically** (set mount if needed; the Scan button
+   re-runs manually)
 4. On-disk names first + the other representation below; expand, search, sort, swap,
    copy 📋🔒/📋🔓
 

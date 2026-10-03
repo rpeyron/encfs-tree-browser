@@ -187,8 +187,11 @@ export function App() {
     savePrefs({ ...loadPrefs(), displayPrimary: mode });
   };
 
-  /** Detect the mode over the directory root after a pick; silent when codec/password unavailable. */
-  const detectModeFor = async (handle: FileSystemDirectoryHandle, stepId: string) => {
+  /** Detect the mode over the directory root; returns the detected mode (or null). */
+  const detectModeFor = async (
+    handle: FileSystemDirectoryHandle,
+    stepId: string,
+  ): Promise<NameMode | null> => {
     try {
       const c = await ensureCodec();
       const entries = await scanDirectory(handle);
@@ -202,12 +205,14 @@ export function App() {
         fullPathEncoded: `/${names.nameEncoded}`,
         entries: entries.length,
       });
+      return mode;
     } catch (err) {
       // no codec/password yet — keep the current mode, user picks manually
       console.log('[directory] selection (mode not detected)', {
         name: handle.name,
         reason: err instanceof Error ? err.message : String(err),
       });
+      return null;
     }
   };
 
@@ -218,13 +223,20 @@ export function App() {
     }
     console.log('[directory] picked', { name: handle.name, stepId: step.id });
     fsaHandleRef.current = handle;
-    handleStepChange({ ...step, source: 'fsa', dirName: handle.name });
+    const picked: DirBindingStep = { ...step, source: 'fsa', dirName: handle.name };
+    handleStepChange(picked);
     setError('');
     // best effort: an in-memory handle already works for this session
     if (activeId) {
-      void saveDirHandle(handle, dirHandleKey(activeId, step.id)).catch(() => {});
+      void saveDirHandle(handle, dirHandleKey(activeId, picked.id)).catch(() => {});
     }
-    void detectModeFor(handle, step.id);
+    // auto chain: detect the mode, then scan (skipped until a password is available)
+    void (async () => {
+      const mode = await detectModeFor(handle, picked.id);
+      if (activeConfig && password) {
+        await runScan({ ...picked, mode: mode ?? picked.mode });
+      }
+    })();
   };
 
   const resolveHandle = async (): Promise<FileSystemDirectoryHandle | null> => {
@@ -293,7 +305,8 @@ export function App() {
       return;
     }
     console.log('[directory] agent path', { path, stepId: step.id });
-    handleStepChange({ ...step, source: 'agent', dirName: path });
+    const loaded: DirBindingStep = { ...step, source: 'agent', dirName: path };
+    handleStepChange(loaded);
     setError('');
     try {
       const c = await ensureCodec();
@@ -311,11 +324,16 @@ export function App() {
         fullPathEncoded: `${parent}/${names.nameEncoded}`,
         entries: rootEntries.length,
       });
+      // auto chain: detect the mode, then scan (skipped until a password is available)
+      if (activeConfig && password) {
+        await runScan({ ...loaded, mode: mode ?? loaded.mode });
+      }
     } catch (err) {
       console.log('[directory] selection (mode not detected)', {
         name: path,
         reason: err instanceof Error ? err.message : String(err),
       });
+      setError(err instanceof Error ? err.message : 'Failed to load the directory');
     }
   };
 
@@ -353,11 +371,16 @@ export function App() {
     setError('');
   };
 
-  const handleScanClick = async () => {
-    if (!step) {
+  /**
+   * Scan an explicit step — directory picks pass the fresh step (auto-chain:
+   * selection → mode detection → scan); the Scan button passes the current state.
+   */
+  const runScan = async (scanStep: DirBindingStep | null) => {
+    if (!scanStep) {
       setError('Select a folder first');
       return;
     }
+    const step = scanStep;
     setScanning(true);
     setError('');
     try {
@@ -449,6 +472,8 @@ export function App() {
     }
   };
 
+  const handleScanClick = () => runScan(step);
+
   const handleExpandNode = async (nodeId: string) => {
     const node = findNodeById(nodesRef.current, nodeId);
     if (!node || !step || node.stepId !== step.id) return;
@@ -473,6 +498,7 @@ export function App() {
       setNodes((prev) => attachChildren(prev, nodeId, prefixIds(withPaths, step.id)));
     } catch (err) {
       console.error('Failed to expand node', err);
+      setError(err instanceof Error ? err.message : 'Failed to load this folder');
     }
   };
 

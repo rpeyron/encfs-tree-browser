@@ -30,6 +30,9 @@ directory trees (File System Access API) and shows encoded ↔ decoded filenames
   EncFS configuration entity (xml + password); one directory per configuration
 - **TypeScript strict, no `any`**; compact code, comments only for non-obvious WHY
 - One failed name conversion must never fail the whole scan (keep the raw name)
+- Directory selection **chains automatically**: mode auto-detect → scan (the Scan
+  button only re-runs); agent API failures must surface as an error banner
+- If an API error occurs, continue again
 
 ## Commands
 
