@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "encfs-agent"
+name = "encfs-browser-agent"
 version = "0.1.0"
 dependencies = [
  "flate2",

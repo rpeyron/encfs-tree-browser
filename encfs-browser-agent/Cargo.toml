@@ -1,5 +1,5 @@
 [package]
-name = "encfs-agent"
+name = "encfs-browser-agent"
 version = "0.1.0"
 edition = "2021"
 description = "Local read-only companion for EncFS Tree Browser: unrestricted directory listing + serves the embedded app"

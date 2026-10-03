@@ -9,14 +9,18 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
 mkdirSync(dist, { recursive: true });
 
-const ps1 = join(root, 'agent', 'encfs-agent.ps1');
-copyFileSync(ps1, join(dist, 'encfs-agent.ps1'));
-console.log(`copied encfs-agent.ps1 -> dist/`);
-
-const exe = join(root, 'agent', 'target', 'release', 'encfs-agent.exe');
-if (existsSync(exe)) {
-  copyFileSync(exe, join(dist, 'encfs-agent.exe'));
-  console.log(`copied encfs-agent.exe -> dist/`);
+const ps1 = join(root, 'encfs-browser-agent', 'encfs-agent.ps1');
+if (existsSync(ps1)) {
+  copyFileSync(ps1, join(dist, 'encfs-agent.ps1'));
+  console.log(`copied encfs-agent.ps1 -> dist/`);
 } else {
-  console.log('encfs-agent.exe not built — skipped (run `npm run build:agent` to build it)');
+  console.log('encfs-agent.ps1 not found — skipped');
+}
+
+const exe = join(root, 'encfs-browser-agent', 'target', 'release', 'encfs-browser-agent.exe');
+if (existsSync(exe)) {
+  copyFileSync(exe, join(dist, 'encfs-browser-agent.exe'));
+  console.log(`copied encfs-browser-agent.exe -> dist/`);
+} else {
+  console.log('encfs-browser-agent.exe not built — skipped (run `npm run build:agent` to build it)');
 }

@@ -42,7 +42,7 @@ npm run dev          # http://localhost:5173
 npm run test         # unit tests (crypto tests live in ../encfs-names-ts)
 npm run build        # dist/
 npm run build:standalone   # dist/encfs-browser.html (single file, offline)
-npm run build:agent       # standalone + agent\target\release\encfs-agent.exe (embedded app)
+npm run build:agent       # standalone + encfs-browser-agent\target\release\encfs-browser-agent.exe (embedded app)
 ```
 
 The standalone html is **self-compressing** (JS/CSS stored gzipped, inflated at boot
@@ -98,18 +98,18 @@ setup beyond:
 
 ## Local agent (unrestricted directory access)
 
-`agent/` contains a tiny zero-dependency Rust server that removes the File System
+`encfs-browser-agent/` contains a tiny zero-dependency Rust server that removes the File System
 Access API limits: it lists **any directory the OS user can read** (hidden, system,
 UNC…), knows the **absolute path**, serves the app itself, and opens your browser.
 
 ```bash
 npm run build:agent      # standalone html + cargo --release + upx (when available)
-agent\target\release\encfs-agent.exe   # single packed file to distribute (~199 KB)
+encfs-browser-agent\target\release\encfs-browser-agent.exe   # single packed file to distribute (~199 KB)
 ```
 
-- **Distribute only `encfs-agent.exe`**: the html is embedded **gzipped**
+- **Distribute only `encfs-browser-agent.exe`**: the html is embedded **gzipped**
   (`Content-Encoding: gzip`, browser inflates natively; flate2 used at build time
-  only) and the exe is **packed with UPX** (`agent/compress.mjs`, skipped when upx is
+  only) and the exe is **packed with UPX** (`encfs-browser-agent/compress.mjs`, skipped when upx is
   not installed — some antivirus tools flag UPX-packed binaries, unpack then if needed);
   it binds `127.0.0.1:8765` (fallback → 8785), writes `agent.log` next to itself
   (URL + events; no console window), auto-opens `http://127.0.0.1:8765/`
@@ -133,9 +133,9 @@ agent\target\release\encfs-agent.exe   # single packed file to distribute (~199 
   rebinding / third-party sites), no `..` paths
 - **Stopping the server** (no window in release): `curl http://127.0.0.1:8765/api/shutdown`
   (or `Invoke-RestMethod http://127.0.0.1:8765/api/shutdown`), port fallback → 8785;
-  fallback: task manager → `encfs-agent.exe` → End task, or
-  `taskkill /IM encfs-agent.exe /F`. Same endpoint works on the PowerShell twin
-- **PowerShell twin** (no Rust toolchain): `agent\encfs-agent.ps1` behaves the same
+  fallback: task manager → `encfs-browser-agent.exe` → End task, or
+  `taskkill /IM encfs-browser-agent.exe /F`. Same endpoint works on the PowerShell twin
+- **PowerShell twin** (no Rust toolchain): `encfs-browser-agent\encfs-agent.ps1` behaves the same
   — distribute it **with `encfs-browser.html` beside it** (the favicon is **embedded in
   the script**, nothing else to copy), run hidden:
   `powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File encfs-agent.ps1`

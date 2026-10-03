@@ -8,8 +8,8 @@ use std::path::PathBuf;
 /// final executable.
 fn main() {
     let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    let html_src = manifest.join("../dist-standalone/encfs-browser.html");
-    let icon_src = manifest.join("../dist-standalone/favicon.svg");
+    let html_src = manifest.join("../dist/encfs-browser.html");
+    let icon_src = manifest.join("../dist/favicon.svg");
     println!("cargo:rerun-if-changed={}", html_src.display());
     println!("cargo:rerun-if-changed={}", icon_src.display());
 
