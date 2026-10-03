@@ -85,7 +85,7 @@ Usage and build commands: [../README.md](../README.md) (codec wiring and archite
 
 ## Local agent (`encfs-browser-agent/`)
 
-Zero-dependency Rust server — plus a PowerShell twin (`encfs-browser-agent/encfs-agent.ps1`, Windows
+Zero-dependency Rust server — plus a PowerShell twin (`encfs-browser-agent/encfs-browser-agent.ps1`, Windows
 only) for machines without a Rust toolchain (same API; distribute it beside
 `encfs-browser.html` or `encfs-browser.html.gz`). The Rust agent is **multiplatform**:
 `cargo check` passes for Windows (host), `x86_64-unknown-linux-gnu` and

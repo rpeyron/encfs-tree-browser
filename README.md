@@ -135,10 +135,10 @@ encfs-browser-agent\target\release\encfs-browser-agent.exe   # single packed fil
   (or `Invoke-RestMethod http://127.0.0.1:8765/api/shutdown`), port fallback → 8785;
   fallback: task manager → `encfs-browser-agent.exe` → End task, or
   `taskkill /IM encfs-browser-agent.exe /F`. Same endpoint works on the PowerShell twin
-- **PowerShell twin** (no Rust toolchain): `encfs-browser-agent\encfs-agent.ps1` behaves the same
+- **PowerShell twin** (no Rust toolchain): `encfs-browser-agent\encfs-browser-agent.ps1` behaves the same
   — distribute it **with `encfs-browser.html` beside it** (the favicon is **embedded in
   the script**, nothing else to copy), run hidden:
-  `powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File encfs-agent.ps1`
+  `powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File encfs-browser-agent.ps1`
 
 ## Browser Compatibility
 

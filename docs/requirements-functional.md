@@ -39,7 +39,7 @@ Technical constraints, architecture and code style live in [requirements-technic
     label becomes the selected full path** (`📁 /dir_1`); there is no separate path
     display
   - **or the local agent** (auto-detected while running: `encfs-browser-agent.exe` or the
-    PowerShell twin `encfs-agent.ps1`): **« 📂 Browse disk… »** opens an in-page
+    PowerShell twin `encfs-browser-agent.ps1`): **« 📂 Browse disk… »** opens an in-page
     explorer (drive dropdown **with volume labels when the OS reports them**,
     typed path for UNC/mounts, subfolder navigation, **⬇ Use this directory**) —
     reads any folder the OS user can access and knows the **absolute path**; the
