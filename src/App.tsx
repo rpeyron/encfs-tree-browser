@@ -9,7 +9,7 @@ import { EncfsNameCodec } from 'encfs-filename-codec';
 import { scanDirectory, type FSEntry } from './lib/fs-scanner';
 import { probeAgent, agentList, joinAgentPath, shutdownAgent, type AgentInfo } from './lib/agent-client';
 import { buildTreeLevel, buildFullPaths, findNodeById } from './lib/tree-builder';
-import { graftSteps, prefixIds, relPathOf, normalizeMount, directoryDisplayNames, wrapDirectoryRoot } from './lib/chain';
+import { graftSteps, prefixIds, relPathOf, normalizeMount, directoryDisplayNames, wrapDirectoryRoot, splitParentPath } from './lib/chain';
 import { filterNodes, sortTree, flattenVisible } from './lib/tree-filter';
 import { detectNameMode } from './lib/mode-detect';
 import { BUILTIN_CONFIGS, BUILTIN_SAMPLES, defaultStepFor } from './lib/builtin-configs';
@@ -165,12 +165,15 @@ export function App() {
     return built;
   };
 
+  /** Primary display always follows the on-disk side; persisted for reloads. */
+  const persistPrimary = (mode: NameMode) => {
+    setPrimary(mode);
+    savePrefs({ ...loadPrefs(), displayPrimary: mode });
+  };
+
   const handleStepChange = (next: DirBindingStep) => {
     // Manual mode toggle: primary follows the on-disk representation.
-    if (step && next.mode !== step.mode) {
-      setPrimary(next.mode);
-      savePrefs({ ...loadPrefs(), displayPrimary: next.mode });
-    }
+    if (step && next.mode !== step.mode) persistPrimary(next.mode);
     setStep(next);
     if (activeId) saveSteps(activeId, [next]);
   };
@@ -182,34 +185,46 @@ export function App() {
       if (activeId) saveSteps(activeId, [next]);
       return next;
     });
-    // Auto-detection: show the on-disk representation first.
-    setPrimary(mode);
-    savePrefs({ ...loadPrefs(), displayPrimary: mode });
+    persistPrimary(mode);
   };
 
-  /** Detect the mode over the directory root; returns the detected mode (or null). */
-  const detectModeFor = async (
-    handle: FileSystemDirectoryHandle,
+  /**
+   * Shared detection flow (FSA and agent): load the root entries, detect the
+   * mode, apply it and log both full paths. Entry/API failures go to onError;
+   * codec/password problems stay silent (the auto-scan surfaces those).
+   */
+  const detectFromEntries = async (
     stepId: string,
+    loadEntries: () => Promise<FSEntry[]>,
+    display: { rawPath: string; parent: string; base: string },
+    onError?: (message: string) => void,
   ): Promise<NameMode | null> => {
+    let entries: FSEntry[];
+    try {
+      entries = await loadEntries();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to read the directory';
+      console.log('[directory] load failed', { name: display.rawPath, error: message });
+      onError?.(message);
+      return null;
+    }
     try {
       const c = await ensureCodec();
-      const entries = await scanDirectory(handle);
       const mode = await detectNameMode(c, entries.map((e) => e.name));
       if (mode) applyDetectedMode(stepId, mode);
-      const names = await directoryDisplayNames(c, handle.name, mode ?? 'encoded');
+      const names = await directoryDisplayNames(c, display.base, mode ?? 'encoded');
       console.log('[directory] selection', {
-        name: handle.name,
+        name: display.rawPath,
         detectedMode: mode ?? '(unchanged)',
-        fullPathDecoded: `/${names.nameDecoded}`,
-        fullPathEncoded: `/${names.nameEncoded}`,
+        fullPathDecoded: `${display.parent}/${names.nameDecoded}`,
+        fullPathEncoded: `${display.parent}/${names.nameEncoded}`,
         entries: entries.length,
       });
       return mode;
     } catch (err) {
       // no codec/password yet — keep the current mode, user picks manually
       console.log('[directory] selection (mode not detected)', {
-        name: handle.name,
+        name: display.rawPath,
         reason: err instanceof Error ? err.message : String(err),
       });
       return null;
@@ -232,7 +247,12 @@ export function App() {
     }
     // auto chain: detect the mode, then scan (skipped until a password is available)
     void (async () => {
-      const mode = await detectModeFor(handle, picked.id);
+      const mode = await detectFromEntries(
+        picked.id,
+        () => scanDirectory(handle),
+        { rawPath: handle.name, parent: '', base: handle.name },
+        setError,
+      );
       if (activeConfig && password) {
         await runScan({ ...picked, mode: mode ?? picked.mode });
       }
@@ -308,36 +328,19 @@ export function App() {
     const loaded: DirBindingStep = { ...step, source: 'agent', dirName: path };
     handleStepChange(loaded);
     setError('');
-    try {
-      const c = await ensureCodec();
-      const rootEntries = await agentList(agent.base, path);
-      const mode = await detectNameMode(c, rootEntries.map((e) => e.name));
-      if (mode) applyDetectedMode(step.id, mode);
-      const sep = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
-      const parent = sep > 0 ? path.slice(0, sep).replace(/\\/g, '/') : '';
-      const base = sep >= 0 ? path.slice(sep + 1) : path;
-      const names = await directoryDisplayNames(c, base, mode ?? step.mode);
-      console.log('[directory] selection', {
-        name: path,
-        detectedMode: mode ?? '(unchanged)',
-        fullPathDecoded: `${parent}/${names.nameDecoded}`,
-        fullPathEncoded: `${parent}/${names.nameEncoded}`,
-        entries: rootEntries.length,
-      });
-      // auto chain: detect the mode, then scan (skipped until a password is available)
-      if (activeConfig && password) {
-        await runScan({ ...loaded, mode: mode ?? loaded.mode });
-      }
-    } catch (err) {
-      console.log('[directory] selection (mode not detected)', {
-        name: path,
-        reason: err instanceof Error ? err.message : String(err),
-      });
-      setError(err instanceof Error ? err.message : 'Failed to load the directory');
+    const { parent, base } = splitParentPath(path);
+    const mode = await detectFromEntries(
+      loaded.id,
+      () => agentList(agent.base, path),
+      { rawPath: path, parent, base },
+      setError,
+    );
+    // auto chain: detect the mode, then scan (skipped until a password is available)
+    if (activeConfig && password) {
+      await runScan({ ...loaded, mode: mode ?? loaded.mode });
     }
   };
 
-  /** Stop the local agent (server exits) and fall back to the browser picker. */
   /** Back to the exact state of a cold start without an agent. */
   const resetToFreshStep = () => {
     const cfg = configs.find((c) => c.id === activeId);
@@ -345,14 +348,29 @@ export function App() {
       const fresh = defaultStepFor(cfg);
       saveSteps(activeId, [fresh]);
       setStep(fresh);
+      // Same as the mount effect on a fresh page load with this config:
+      setPassword(cfg.rememberedPassword ?? '');
+      setRemember(Boolean(cfg.rememberedPassword));
     } else {
       setStep(null);
+      setPassword('');
+      setRemember(false);
     }
+    fsaHandleRef.current = null;
     setNodes([]);
     setExpanded({});
     setSelectedId(null);
+    setSearch('');
     setCodec(null);
     codecKeyRef.current = '';
+    setError('');
+  };
+
+  /** Leaving agent mode (shutdown or agent gone): identical to a cold start without it. */
+  const enterNonAgentMode = (reason: string) => {
+    console.log(`[agent] ${reason} — back to the browser picker`);
+    setAgent(null);
+    if (step?.source === 'agent') resetToFreshStep();
   };
 
   const handleStopAgent = async () => {
@@ -362,13 +380,7 @@ export function App() {
       setError('Shutdown request failed — is the agent still running?');
       return;
     }
-    console.log('[agent] stopped — back to the browser picker');
-    setAgent(null);
-    if (step?.source === 'agent') {
-      // The loaded tree came from the agent: reset to a fresh FSA directory step.
-      resetToFreshStep();
-    }
-    setError('');
+    enterNonAgentMode('stopped');
   };
 
   /**
@@ -417,13 +429,11 @@ export function App() {
         if (viaAgent) {
           // Agent path is absolute: parent part is outside the volume (kept raw in
           // both representations), only the final segment is a volume name.
-          const sep = Math.max(step.dirName.lastIndexOf('/'), step.dirName.lastIndexOf('\\'));
-          const parent = sep > 0 ? step.dirName.slice(0, sep).replace(/\\/g, '/') : '';
-          const base = sep >= 0 ? step.dirName.slice(sep + 1) : step.dirName;
-          names = await directoryDisplayNames(c, base, step.mode);
-          prefixDec = parent;
-          prefixEnc = parent;
-          onDiskName = base;
+          const split = splitParentPath(step.dirName);
+          names = await directoryDisplayNames(c, split.base, step.mode);
+          prefixDec = split.parent;
+          prefixEnc = split.parent;
+          onDiskName = split.base;
         } else {
           names = await directoryDisplayNames(c, step.dirName, step.mode);
           prefixDec = pre.decoded;
@@ -461,8 +471,7 @@ export function App() {
       setExpanded(useGraft ? {} : { [`${step.id}:`]: true });
       setLoading({});
       // Fresh directory: primary = on-disk representation (matches the mode).
-      setPrimary(step.mode);
-      savePrefs({ ...loadPrefs(), displayPrimary: step.mode });
+      persistPrimary(step.mode);
       setView('browse');
     } catch (err) {
       console.error('[scan] failed', err);
@@ -537,9 +546,7 @@ export function App() {
   const collapseAll = () => setExpanded({});
 
   const swapPrimary = () => {
-    const next: NameMode = primary === 'encoded' ? 'decoded' : 'encoded';
-    setPrimary(next);
-    savePrefs({ ...loadPrefs(), displayPrimary: next });
+    persistPrimary(primary === 'encoded' ? 'decoded' : 'encoded');
   };
 
   const toggleSort = () => {
@@ -587,13 +594,7 @@ export function App() {
         setAgent(info);
         return;
       }
-      if (agent) {
-        console.log('[agent] no longer answering — back to the browser picker');
-        setAgent(null);
-        if (step?.source === 'agent') {
-          resetToFreshStep();
-        }
-      }
+      if (agent) enterNonAgentMode('no longer answering');
     });
   };
 

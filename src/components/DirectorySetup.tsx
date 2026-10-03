@@ -39,18 +39,13 @@ export function DirectorySetup({
         {agent ? (
           <AgentExplorer agent={agent} step={step} onChoose={onAgentPath} />
         ) : (
-          <>
-            <DirectoryPicker
-              onDirectorySelected={onDirectory}
-              onError={onError}
-              isLoading={disabled}
-              label={step.dirName ? `📁 ${selectedPath}` : '📂 Select folder…'}
-              title={step.dirName ? selectedPath : 'Select the folder to display'}
-            />
-            {!step.dirName && (
-              <span className="dir-bar-hint">choose the folder to display</span>
-            )}
-          </>
+          <DirectoryPicker
+            onDirectorySelected={onDirectory}
+            onError={onError}
+            isLoading={disabled}
+            label={step.dirName ? `📁 ${selectedPath}` : '📂 Select folder…'}
+            title={step.dirName ? selectedPath : 'Select the folder to display'}
+          />
         )}
       </div>
       <button

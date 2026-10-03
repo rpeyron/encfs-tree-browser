@@ -102,7 +102,7 @@ only) for machines without a Rust toolchain (same API; distribute it beside
   | `/api/list?path=` | `{"path":…,"entries":[{name,isDir,size,mtime}]}` — same shape as `FSEntry`; absolute path required, `..` rejected |
   | `/api/shutdown` | `{"ok":true}` then the process exits (graceful local stop) |
 
-- **Embedding**: `agent/build.rs` gzips `../dist-standalone/encfs-browser.html` into
+- **Embedding**: `agent/build.rs` gzips `../dist/encfs-browser.html` into
   `OUT_DIR` (clear failure when the standalone was not built) → `include_bytes!` →
   served with `Content-Encoding: gzip` (native browser inflation, no runtime code).
   **flate2 is a build-dependency only, never linked into the binary**. The exe carries
@@ -257,7 +257,7 @@ docs/                  # This file + functional requirements
 ## Build
 
 - `npm run build` → `dist/` (normal multi-file build, target es2022)
-- `npm run build:standalone` → `dist-standalone/encfs-browser.html` (single file;
+- `npm run build:standalone` → `dist/encfs-browser.html` (single file;
   `vite-plugin-singlefile` + self-compressing loader: JS/CSS gzipped, inflated via
   native `DecompressionStream`, favicon as `data:` URI; **≈ 42 KB instead of ≈ 97 KB**)
 - `npm run build:agent` → standalone + `cargo build --release` + UPX packing

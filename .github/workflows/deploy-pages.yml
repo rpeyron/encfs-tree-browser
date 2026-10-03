@@ -5,7 +5,7 @@ name: Deploy to GitHub Pages
 #   (siblings), which is exactly what the file:../encfs-names-ts dependency resolves to
 # - the codec is fetched from `<owner>/encfs-names-ts` (must be a PUBLIC repo under the
 #   same GitHub account); override with the repo variable ENCFS_NAMES_REPO if renamed
-# - Settings → Pages → Source: "GitHub Actions"
+# - Settings > Pages > Source: "GitHub Actions"
 # - encfs-tree-browser/conf/ is gitignored: drop-in configs are local only unless
 #   force-added (`git add -f conf/xxxx.encfs6.xml`)
 
@@ -35,7 +35,7 @@ jobs:
         with:
           path: encfs-tree-browser
 
-      - name: Checkout codec (file:../encfs-names-ts — same owner, or set vars.ENCFS_NAMES_REPO)
+      - name: Checkout codec (file:../encfs-names-ts - same owner, or set vars.ENCFS_NAMES_REPO)
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.ENCFS_NAMES_REPO || format('{0}/encfs-names-ts', github.repository_owner) }}
@@ -66,10 +66,10 @@ jobs:
 
       - name: Prepare Pages artifact
         run: |
-          test -s encfs-tree-browser/dist-standalone/encfs-browser.html
+          test -s encfs-tree-browser/dist/encfs-browser.html
           mkdir -p /tmp/pages
-          cp encfs-tree-browser/dist-standalone/encfs-browser.html /tmp/pages/index.html
-          cp encfs-tree-browser/dist-standalone/favicon.svg /tmp/pages/
+          cp encfs-tree-browser/dist/encfs-browser.html /tmp/pages/index.html
+          cp encfs-tree-browser/dist/favicon.svg /tmp/pages/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run build:std && npm run build:standalone && npm run copy:agent",
+    "build:std": "tsc -b && vite build",
     "build:standalone": "tsc -b && vite build --mode standalone",
-    "build:agent": "npm run build:standalone && cargo build --release --manifest-path agent/Cargo.toml && node agent/compress.mjs",
+    "build:agent": "npm run build:standalone && cargo build --release --manifest-path encfs-browser-agent/Cargo.toml && node encfs-browser-agent/compress.mjs && npm run copy:agent",
+    "copy:agent": "node encfs-browser-agent/copy.mjs",
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",

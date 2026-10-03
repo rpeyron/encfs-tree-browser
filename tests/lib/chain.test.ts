@@ -7,6 +7,7 @@ import {
   prefixIds,
   relPathOf,
   normalizeMount,
+  splitParentPath,
   directoryDisplayNames,
   wrapDirectoryRoot,
 } from '../../src/lib/chain';
@@ -69,6 +70,13 @@ describe('id helpers', () => {
     expect(normalizeMount('/')).toBe('');
     expect(normalizeMount('a/b/')).toBe('/a/b');
     expect(normalizeMount('//x//y')).toBe('/x/y');
+  });
+
+  it('splitParentPath splits absolute paths (both separators)', () => {
+    expect(splitParentPath('D:\\Dev\\encfs')).toEqual({ parent: 'D:/Dev', base: 'encfs' });
+    expect(splitParentPath('/mnt/vol/sub')).toEqual({ parent: '/mnt/vol', base: 'sub' });
+    expect(splitParentPath('D:\\')).toEqual({ parent: 'D:', base: '' });
+    expect(splitParentPath('relative')).toEqual({ parent: '', base: 'relative' });
   });
 });
 

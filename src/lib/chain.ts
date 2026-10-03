@@ -24,6 +24,14 @@ export function relPathOf(id: string): string {
   return idx === -1 ? id : id.slice(idx + 1);
 }
 
+/** Split an absolute path into parent (posix separators) and last segment. */
+export function splitParentPath(path: string): { parent: string; base: string } {
+  const sep = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+  const parent = sep > 0 ? path.slice(0, sep).replace(/\\/g, '/') : '';
+  const base = sep >= 0 ? path.slice(sep + 1) : path;
+  return { parent, base };
+}
+
 /**
  * Decoded/encoded names of the selected directory itself (root parent IV = 0).
  * Falls back to the raw on-disk name for both sides when it is not a volume

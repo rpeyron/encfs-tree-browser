@@ -206,7 +206,7 @@ primary column + sort); directory handles persist in IndexedDB
 ### 9. Standalone Single-File Build
 - `npm run build:standalone` bundles the whole app (JS, CSS, sample `.encfs6.xml`
   configs, favicon as a `data:` URI) into one self-contained
-  `dist-standalone/encfs-browser.html` — **self-compressing**: JS/CSS are gzipped and
+  `dist/encfs-browser.html` — **self-compressing**: JS/CSS are gzipped and
   inflated at boot via the native `DecompressionStream` (~42 KB instead of ~97 KB)
 - Runs offline from disk (`file://`), no server required
 

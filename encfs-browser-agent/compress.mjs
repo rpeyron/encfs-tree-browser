@@ -5,9 +5,9 @@ import { existsSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const exe = join(dirname(fileURLToPath(import.meta.url)), 'target', 'release', 'encfs-agent.exe');
+const exe = join(dirname(fileURLToPath(import.meta.url)), 'target', 'release', 'encfs-browser-agent.exe');
 if (!existsSync(exe)) {
-  console.error('encfs-agent.exe not found — run `cargo build --release` first');
+  console.error('encfs-browser-agent.exe not found — run `cargo build --release` first');
   process.exit(1);
 }
 

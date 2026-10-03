@@ -930,12 +930,6 @@ body {
   flex-wrap: wrap;
 }
 
-.dir-bar-hint {
-  font-size: 0.78rem;
-  color: var(--color-slate-400);
-  font-style: italic;
-}
-
 .tree-error {
   padding: 6px 10px;
   border-radius: 6px;
@@ -1176,13 +1170,6 @@ body {
 
 .header-dir .dir-bar-source {
   flex-wrap: nowrap;
-}
-
-.header-dir .dir-bar-hint {
-  display: inline;
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 0.75rem;
-  white-space: nowrap;
 }
 
 .app-header-title {

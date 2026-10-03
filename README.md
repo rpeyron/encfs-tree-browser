@@ -41,7 +41,7 @@ npm install          # links file:../encfs-names-ts and builds it
 npm run dev          # http://localhost:5173
 npm run test         # unit tests (crypto tests live in ../encfs-names-ts)
 npm run build        # dist/
-npm run build:standalone   # dist-standalone/encfs-browser.html (single file, offline)
+npm run build:standalone   # dist/encfs-browser.html (single file, offline)
 npm run build:agent       # standalone + agent\target\release\encfs-agent.exe (embedded app)
 ```
 
@@ -52,7 +52,7 @@ via the native `DecompressionStream`): ~42 KB instead of ~97 KB.
 
 1. Drop your config in `conf/xxxx.encfs6.xml` (`conf/` is gitignored)
 2. Run `npm run build:standalone` — `xxxx` appears in the dropdown of
-   `dist-standalone/encfs-browser.html`, XML inlined
+   `dist/encfs-browser.html`, XML inlined
 
 Alternatively, open the standalone file and use **➕ Add configuration…**: the config is
 then stored in that browser's localStorage for the `file://` origin.

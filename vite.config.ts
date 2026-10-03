@@ -75,8 +75,8 @@ function finalizeStandalone(): Plugin {
     name: 'finalize-standalone',
     apply: 'build',
     closeBundle() {
-      const from = resolve('dist-standalone/index.html')
-      const to = resolve('dist-standalone/encfs-browser.html')
+      const from = resolve('dist/index.html')
+      const to = resolve('dist/encfs-browser.html')
       if (!existsSync(from)) return
       const html = readFileSync(from, 'utf8')
       writeFileSync(to, compressHtml(html))
@@ -116,7 +116,7 @@ export default defineConfig(async ({ mode }) => {
     },
     build: standalone
       ? {
-          outDir: 'dist-standalone',
+          outDir: 'dist',
           assetsInlineLimit: 100000000,
           cssCodeSplit: false,
           target: 'es2022',
