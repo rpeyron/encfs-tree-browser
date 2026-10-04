@@ -40,28 +40,42 @@ async function tryProbe(base: string): Promise<AgentInfo | null> {
   }
 }
 
+let cachedProbe: Promise<AgentInfo | null> | null = null;
+
+/** Reset probe cache (for tests only) */
+export function resetProbeCache() {
+  cachedProbe = null;
+}
+
 /**
  * Probe for the local agent without polluting the console with failed requests:
  * - file:// → never probe (no silent relative fetch possible, noise-free by default)
  * - localhost http (agent same-origin or vite) → relative endpoint first
  * - always try 8765 once; the full port range is only scanned in dev
+ * - cached: subsequent calls return the same promise (probe once per page load)
  */
 export async function probeAgent(): Promise<AgentInfo | null> {
+  if (cachedProbe) return cachedProbe;
+
   if (typeof location !== 'undefined' && location.protocol === 'file:') return null;
 
-  const bases: string[] = [];
-  if (typeof location !== 'undefined' && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-    bases.push('');
-  }
-  bases.push('http://127.0.0.1:8765');
-  if (import.meta.env.DEV) {
-    bases.push(...PORT_CANDIDATES.slice(1).map((p) => `http://127.0.0.1:${p}`));
-  }
-  for (const base of bases) {
-    const info = await tryProbe(base);
-    if (info) return info;
-  }
-  return null;
+  cachedProbe = (async () => {
+    const bases: string[] = [];
+    if (typeof location !== 'undefined' && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+      bases.push('');
+    }
+    bases.push('http://127.0.0.1:8765');
+    if (import.meta.env.DEV) {
+      bases.push(...PORT_CANDIDATES.slice(1).map((p) => `http://127.0.0.1:${p}`));
+    }
+    for (const base of bases) {
+      const info = await tryProbe(base);
+      if (info) return info;
+    }
+    return null;
+  })();
+
+  return cachedProbe;
 }
 
 interface RawEntry {

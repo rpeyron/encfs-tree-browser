@@ -1,5 +1,9 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { probeAgent, agentList, joinAgentPath, shutdownAgent } from '../../src/lib/agent-client';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { probeAgent, agentList, joinAgentPath, shutdownAgent, resetProbeCache } from '../../src/lib/agent-client';
+
+beforeEach(() => {
+  resetProbeCache();
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();

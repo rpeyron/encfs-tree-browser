@@ -92,12 +92,19 @@ export function App() {
   // Probe the local agent (same origin when served by it, else 8765-8785).
   useEffect(() => {
     let alive = true;
-    void probeAgent().then((info) => {
-      if (alive) {
-        setAgent(info);
-        if (info) console.log('[agent] detected', { base: info.base || '(same origin)', roots: info.roots });
-      }
-    });
+    void probeAgent()
+      .then((info) => {
+        if (alive) {
+          setAgent(info);
+          if (info) console.log('[agent] detected', { base: info.base || '(same origin)', roots: info.roots });
+        }
+      })
+      .catch((err) => {
+        if (alive) {
+          console.error('[agent] probe failed:', err);
+          setAgent(null);
+        }
+      });
     return () => {
       alive = false;
     };
@@ -586,16 +593,21 @@ export function App() {
   const handleViewChange = (next: View) => {
     setView(next);
     if (next !== 'browse') return;
-    void probeAgent().then((info) => {
-      if (info) {
-        if (!agent) {
-          console.log('[agent] detected', { base: info.base || '(same origin)', roots: info.roots });
+    void probeAgent()
+      .then((info) => {
+        if (info) {
+          if (!agent) {
+            console.log('[agent] detected', { base: info.base || '(same origin)', roots: info.roots });
+          }
+          setAgent(info);
+          return;
         }
-        setAgent(info);
-        return;
-      }
-      if (agent) enterNonAgentMode('no longer answering');
-    });
+        if (agent) enterNonAgentMode('no longer answering');
+      })
+      .catch((err) => {
+        console.error('[agent] probe failed:', err);
+        if (agent) enterNonAgentMode('probe error');
+      });
   };
 
   // Keyboard navigation — kept in a ref so the listener attaches once per view.
