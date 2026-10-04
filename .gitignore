@@ -14,7 +14,7 @@ dist-standalone
 *.local
 
 # Dropped EncFS configs (local, never commit)
-conf/
+conf*/
 
 
 # Editor directories and files
@@ -30,3 +30,5 @@ conf/
 
 
 encfs-browser-agent/target/
+
+test-results/

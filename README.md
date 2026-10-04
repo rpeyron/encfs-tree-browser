@@ -6,6 +6,31 @@ A web application for viewing and navigating EncFS-encrypted directory trees wit
 bidirectional filename mapping: encrypted and decrypted names side-by-side, a batch
 converter, and a single-file offline build.
 
+## Screenshots
+
+<table>
+<tr>
+<td width="50%">
+<img src="docs/screenshots/browse-agent-view.png" alt="Browse view with local agent showing decoded directory tree">
+<p align="center"><em>Browse view via local agent: real directory with decoded names</em></p>
+</td>
+<td width="50%">
+<img src="docs/screenshots/convert-view.png" alt="Convert tab showing expanded tree view with decoded paths">
+<p align="center"><em>Convert tab: decoded tree view with all nodes expanded</em></p>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<img src="docs/screenshots/browse-view.png" alt="Browse view with File System Access API">
+<p align="center"><em>Browse view: File System Access mode (Chrome/Edge)</em></p>
+</td>
+<td width="50%">
+<img src="docs/screenshots/config-modal.png" alt="Configuration modal">
+<p align="center"><em>Add/edit EncFS configurations</em></p>
+</td>
+</tr>
+</table>
+
 ## Features
 
 - **Browse** (Chrome/Edge): pick a directory and see decoded names next to their
@@ -33,6 +58,10 @@ converter, and a single-file offline build.
 - **Directory browsing**: Chrome 90+ or Edge 90+ (File System Access API) — the Browse
   tab only appears there. The Convert tab works in any modern browser
 - An **EncFS volume**: its directory, password, and `.encfs6.xml` config file
+
+## Dependencies
+
+This project uses [**encfs-names-ts**](https://github.com/rpeyron/encfs-names-ts) for EncFS filename encoding/decoding. The codec handles all cryptographic operations (AES, PBKDF2, MAC verification) via the Web Crypto API.
 
 ## Getting Started
 

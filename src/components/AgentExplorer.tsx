@@ -26,6 +26,13 @@ export function AgentExplorer({ agent, step, onChoose }: AgentExplorerProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Debounce draft changes
+  useEffect(() => {
+    if (!draft || draft === path) return;
+    const timer = setTimeout(() => void load(draft), 800);
+    return () => clearTimeout(timer);
+  }, [draft]);
+
   const initialPath = (): string => {
     if (step?.source === 'agent' && step.dirName) {
       const parent = parentOf(step.dirName);
@@ -104,7 +111,7 @@ export function AgentExplorer({ agent, step, onChoose }: AgentExplorerProps) {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void load(draft);
               }}
-              placeholder="Type any path (UNC/mounts ok) and press Enter"
+              placeholder="Type any path (UNC/mounts ok)"
               spellCheck={false}
             />
             <button

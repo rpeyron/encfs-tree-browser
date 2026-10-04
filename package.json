@@ -1,7 +1,7 @@
 {
   "name": "encfs-tree-browser",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,19 +14,22 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "screenshots": "playwright test --config=playwright.config.ts"
   },
   "dependencies": {
     "encfs-filename-codec": "file:../encfs-names-ts",
     "preact": "^10.29.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@prefresh/vite": "^4.0.1",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitest/ui": "^4.1.11",
     "oxlint": "^1.79.0",
+    "playwright": "^1.63.0",
     "typescript": "~6.0.2",
     "vite": "^8.2.2",
     "vite-plugin-singlefile": "^2.3.3",

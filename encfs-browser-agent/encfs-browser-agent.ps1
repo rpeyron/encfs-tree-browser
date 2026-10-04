@@ -10,7 +10,8 @@
 #>
 param(
   [int]$StartPort = 8765,
-  [string]$HtmlPath
+  [string]$HtmlPath,
+  [switch]$NoBrowser
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,7 +19,7 @@ $ErrorActionPreference = 'Stop'
 $htmlFile = @(
   $HtmlPath
   (Join-Path $PSScriptRoot 'encfs-browser.html')
-  (Join-Path $PSScriptRoot '..\dist-standalone\encfs-browser.html')
+  (Join-Path $PSScriptRoot '..\dist\encfs-browser.html')
 ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
 if (-not $htmlFile) { throw 'encfs-browser.html not found - put it next to this script (npm run build:standalone)' }
 # Prefer a gzip sidecar (smaller to distribute); served with Content-Encoding: gzip.
@@ -93,7 +94,7 @@ while ($port -le ($StartPort + 20)) {
 if (-not $listener) { throw "no free port in $StartPort..$($StartPort + 20)" }
 $url = "http://127.0.0.1:$port/"
 Log "encfs-agent-ps $version listening on $url"
-Start-Process $url
+if (-not $NoBrowser) { Start-Process $url }
 
 while ($true) {
   $tcp = $listener.AcceptTcpClient()
