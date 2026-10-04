@@ -785,75 +785,65 @@ export function App() {
             title="EncFS password for the selected configuration"
           />
         </div>
-        <nav className="app-tabs">
-          <button
-            className={`app-tab${view === 'convert' ? ' app-tab-active' : ''}`}
-            onClick={() => handleViewChange('convert')}
-          >
-            ⚡ Convert
-          </button>
-          {SUPPORTS_FSA && (
+        {!activeConfig || !password ? (
+          <div className="app-prompt">
+            {!activeConfig ? '👆 Select a configuration' : '🔑 Enter password'}
+          </div>
+        ) : (
+          <nav className="app-tabs">
             <button
-              className={`app-tab${view === 'browse' ? ' app-tab-active' : ''}`}
-              onClick={() => handleViewChange('browse')}
+              className={`app-tab${view === 'convert' ? ' app-tab-active' : ''}`}
+              onClick={() => handleViewChange('convert')}
             >
-              🌳 Browse
+              ⚡ Convert
             </button>
-          )}
-        </nav>
-        {view === 'browse' && (
-          <>
-            {!SUPPORTS_FSA && !agent ? (
-              <div className="header-dir">
-                <div className="setup-error">
-                  <span className="setup-error-icon">ℹ️</span>
-                  <div className="setup-error-content">
-                    <p className="setup-error-message">
-                      Browse mode not available: requires File System Access API or local agent.
-                      Use the <strong>⚡ Convert</strong> tab to decode file names.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : step ? (
-              <div className="header-dir">
-                <DirectorySetup
-                  step={step}
-                  agent={agent}
-                  onDirectory={(h) => void handleDirectoryPicked(h)}
-                  onAgentPath={(p) => void handleAgentPathLoaded(p)}
-                  onChange={handleStepChange}
-                  onError={setError}
-                  disabled={scanning}
-                />
-                <button onClick={() => void handleScanClick()} disabled={!canScan} className="setup-button scan-button">
-                  {scanning ? (
-                    <span className="setup-button-content">
-                      <span className="setup-spinner"></span>Scanning...
-                    </span>
-                  ) : (
-                    '🔍 Scan'
-                  )}
-                </button>
-                {agent && (
-                  <button
-                    type="button"
-                    className="stop-agent-btn"
-                    onClick={() => void handleStopAgent()}
-                    disabled={scanning}
-                    title="Stop the local agent (shutdown) and switch back to the browser picker"
-                  >
-                    ⏹ Stop
-                  </button>
-                )}
-              </div>
-            ) : null}
-          </>
+            {(SUPPORTS_FSA || agent) && (
+              <button
+                className={`app-tab${view === 'browse' ? ' app-tab-active' : ''}`}
+                onClick={() => handleViewChange('browse')}
+              >
+                🌳 Browse
+              </button>
+            )}
+          </nav>
+        )}
+        {activeConfig && password && view === 'browse' && (
+          <div className="header-dir">
+            <DirectorySetup
+              step={step ?? { id: crypto.randomUUID(), label: '', mode: 'encoded', mountPoint: '', dirName: '', source: 'fsa' as const }}
+              agent={agent}
+              onDirectory={(h) => void handleDirectoryPicked(h)}
+              onAgentPath={(p) => void handleAgentPathLoaded(p)}
+              onChange={handleStepChange}
+              onError={setError}
+              disabled={scanning}
+            />
+            <button onClick={() => void handleScanClick()} disabled={!canScan} className="setup-button scan-button">
+              {scanning ? (
+                <span className="setup-button-content">
+                  <span className="setup-spinner"></span>Scanning...
+                </span>
+              ) : (
+                '🔍 Scan'
+              )}
+            </button>
+            {agent && (
+              <button
+                type="button"
+                className="stop-agent-btn"
+                onClick={() => void handleStopAgent()}
+                disabled={scanning}
+                title="Stop the local agent (shutdown) and switch back to the browser picker"
+              >
+                ⏹ Stop
+              </button>
+            )}
+          </div>
         )}
       </header>
 
       <main className="app-main">
-        {view === 'convert' && (
+        {activeConfig && password && view === 'convert' && (
           <BatchConvert
             getCodec={ensureCodec}
             sampleList={sampleList}
@@ -864,7 +854,7 @@ export function App() {
           />
         )}
 
-        {view === 'browse' && (
+        {activeConfig && password && view === 'browse' && (
           <div className="app-display">
             {error && (
               <div className="setup-error tree-error">
