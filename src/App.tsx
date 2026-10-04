@@ -75,7 +75,6 @@ export function App() {
 
   const [view, setView] = useState<View>(() => (SUPPORTS_FSA ? 'browse' : 'convert'));
   const [configs, setConfigs] = useState<EncfsConfiguration[]>(() => {
-    console.log(`[encfs-tree-browser] v${import.meta.env.VITE_APP_VERSION || 'dev'} loaded`);
     return [
       ...BUILTIN_CONFIGS,
       ...loadConfigs(),

@@ -1,10 +1,11 @@
 {
   "name": "encfs-tree-browser",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "npm version patch --no-git-tag-version",
     "build": "npm run build:std && npm run build:standalone && npm run copy:agent",
     "build:std": "tsc -b && vite build",
     "build:standalone": "tsc -b && vite build --mode standalone",

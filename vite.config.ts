@@ -95,6 +95,8 @@ export default defineConfig(async ({ mode }) => {
   return {
     define: {
       'import.meta.env.VITE_APP_VERSION': JSON.stringify(version),
+      __APP_VERSION__: JSON.stringify(version),
+      __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     },
     plugins: [
       inlineFavicon(),
