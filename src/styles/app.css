@@ -1412,4 +1412,29 @@ body {
   padding-right: 14px;
 }
 
-.header-dir 
+.app-footer {
+  padding: 10px 16px;
+  background: var(--color-slate-100);
+  border-top: 1px solid var(--color-slate-200);
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--color-slate-600);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.app-footer a {
+  color: var(--color-indigo-600);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-footer a:hover {
+  text-decoration: underline;
+}
+ 
