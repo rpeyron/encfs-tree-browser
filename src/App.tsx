@@ -73,7 +73,7 @@ function attachChildren(list: TreeNode[], id: string, children: TreeNode[]): Tre
 export function App() {
   const [agent, setAgent] = useState<AgentInfo | null>(null);
 
-  const [view, setView] = useState<View>(() => (SUPPORTS_FSA ? 'browse' : 'convert'));
+  const [view, setView] = useState<View>('convert');
   const [configs, setConfigs] = useState<EncfsConfiguration[]>(() => {
     return [
       ...BUILTIN_CONFIGS,
@@ -82,6 +82,14 @@ export function App() {
   });
   const [activeId, setActiveId] = useState<string>(() => loadActiveId() ?? '');
   const activeConfig = configs.find((c) => c.id === activeId) ?? null;
+
+  useEffect(() => {
+    if (activeConfig && !BUILTIN_SAMPLES[activeConfig.id] && SUPPORTS_FSA) {
+      setView('browse');
+    } else {
+      setView('convert');
+    }
+  }, [activeConfig]);
 
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);

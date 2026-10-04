@@ -27,7 +27,6 @@ export function BatchConvert({
   onToggleSort,
 }: BatchConvertProps) {
   const [input, setInput] = useState('');
-  const [direction, setDirection] = useState<'encode' | 'decode'>('decode');
   const [rows, setRows] = useState<ConvertRow[]>([]);
   const [pairs, setPairs] = useState<PathPair[]>([]);
   const [view, setView] = useState<'table' | 'tree'>('table');
@@ -38,7 +37,17 @@ export function BatchConvert({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [dragOver, setDragOver] = useState(false);
 
-  const run = async () => {
+  // Auto-detect direction from first lines
+  const detectDirection = (text: string): 'encode' | 'decode' => {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean).slice(0, 5);
+    if (lines.length === 0) return 'decode';
+    // Encoded names often contain base64-like chars or commas (chained IV)
+    const encodedPattern = /[A-Za-z0-9+/=,]{20,}/;
+    const hasEncoded = lines.some(line => encodedPattern.test(line));
+    return hasEncoded ? 'decode' : 'encode';
+  };
+
+  const runConvert = async (direction: 'encode' | 'decode') => {
     const lines = input
       .split(/\r?\n/)
       .map((l) => l.trim())
@@ -135,22 +144,8 @@ export function BatchConvert({
   return (
     <div className="batch">
       <div className="batch-controls">
-        <div className="batch-seg">
-          <button
-            className={`batch-seg-btn${direction === 'decode' ? ' active' : ''}`}
-            onClick={() => setDirection('decode')}
-          >
-            🔓 Decode
-          </button>
-          <button
-            className={`batch-seg-btn${direction === 'encode' ? ' active' : ''}`}
-            onClick={() => setDirection('encode')}
-          >
-            🔒 Encode
-          </button>
-        </div>
         <textarea
-          className={`batch-input${dragOver ? ' drag-over' : ''}`}
+          className={`batch-input${dragOver ? ' drag-over' : ''}${rows.length === 0 ? ' batch-input-large' : ''}`}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={'One name or full path per line — or drop a .txt file here\n/dir/file.txt\nplain-name.txt'}
@@ -169,24 +164,49 @@ export function BatchConvert({
           }}
         />
         <div className="batch-actions">
+          <button
+            className={`${detectDirection(input) === 'encode' ? 'convert-btn' : 'step-btn'}`}
+            onClick={() => void runConvert('encode')}
+            disabled={busy}
+          >
+            🔒 Encode
+          </button>
+          <button
+            className={`${detectDirection(input) === 'decode' ? 'convert-btn' : 'step-btn'}`}
+            onClick={() => void runConvert('decode')}
+            disabled={busy}
+          >
+            🔓 Decode
+          </button>
           {loadFileBtn}
           {sampleList && (
-            <button
-              className="step-btn"
-              onClick={() => {
-                setInput(direction === 'encode' ? sampleList.decoded : sampleList.encoded);
-                setRows([]);
-                setPairs([]);
-                setError('');
-              }}
-              title="Load the EncFS 1.9.5 test file list bundled with this sample (matches the selected direction)"
-            >
-              📄 Sample list
-            </button>
+            <>
+              <button
+                className="step-btn"
+                onClick={() => {
+                  setInput(sampleList.encoded);
+                  setRows([]);
+                  setPairs([]);
+                  setError('');
+                }}
+                title="Load encoded sample list"
+              >
+                📄 Sample Encoded list
+              </button>
+              <button
+                className="step-btn"
+                onClick={() => {
+                  setInput(sampleList.decoded);
+                  setRows([]);
+                  setPairs([]);
+                  setError('');
+                }}
+                title="Load decoded sample list"
+              >
+                📄 Sample Decoded list
+              </button>
+            </>
           )}
-          <button className="convert-btn" onClick={() => void run()} disabled={busy}>
-            {busy ? 'Converting…' : `⇄ Convert ${direction}`}
-          </button>
           {rows.length > 0 && (
             <>
               <button

@@ -1437,4 +1437,8 @@ body {
 .app-footer a:hover {
   text-decoration: underline;
 }
+
+.batch-input-large {
+  min-height: 50vh;
+}
  
