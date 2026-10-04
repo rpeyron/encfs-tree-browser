@@ -800,38 +800,54 @@ export function App() {
             </button>
           )}
         </nav>
-        {view === 'browse' && step && (
-          <div className="header-dir">
-            <DirectorySetup
-              step={step}
-              agent={agent}
-              onDirectory={(h) => void handleDirectoryPicked(h)}
-              onAgentPath={(p) => void handleAgentPathLoaded(p)}
-              onChange={handleStepChange}
-              onError={setError}
-              disabled={scanning}
-            />
-            <button onClick={() => void handleScanClick()} disabled={!canScan} className="setup-button scan-button">
-              {scanning ? (
-                <span className="setup-button-content">
-                  <span className="setup-spinner"></span>Scanning...
-                </span>
-              ) : (
-                '🔍 Scan'
-              )}
-            </button>
-            {agent && (
-              <button
-                type="button"
-                className="stop-agent-btn"
-                onClick={() => void handleStopAgent()}
-                disabled={scanning}
-                title="Stop the local agent (shutdown) and switch back to the browser picker"
-              >
-                ⏹ Stop
-              </button>
-            )}
-          </div>
+        {view === 'browse' && (
+          <>
+            {!SUPPORTS_FSA && !agent ? (
+              <div className="header-dir">
+                <div className="setup-error">
+                  <span className="setup-error-icon">ℹ️</span>
+                  <div className="setup-error-content">
+                    <p className="setup-error-message">
+                      Browse mode requires either File System Access API or the local agent.
+                      Use the <strong>⚡ Convert</strong> tab to decode file names.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : step ? (
+              <div className="header-dir">
+                <DirectorySetup
+                  step={step}
+                  agent={agent}
+                  onDirectory={(h) => void handleDirectoryPicked(h)}
+                  onAgentPath={(p) => void handleAgentPathLoaded(p)}
+                  onChange={handleStepChange}
+                  onError={setError}
+                  disabled={scanning}
+                />
+                <button onClick={() => void handleScanClick()} disabled={!canScan} className="setup-button scan-button">
+                  {scanning ? (
+                    <span className="setup-button-content">
+                      <span className="setup-spinner"></span>Scanning...
+                    </span>
+                  ) : (
+                    '🔍 Scan'
+                  )}
+                </button>
+                {agent && (
+                  <button
+                    type="button"
+                    className="stop-agent-btn"
+                    onClick={() => void handleStopAgent()}
+                    disabled={scanning}
+                    title="Stop the local agent (shutdown) and switch back to the browser picker"
+                  >
+                    ⏹ Stop
+                  </button>
+                )}
+              </div>
+            ) : null}
+          </>
         )}
       </header>
 
