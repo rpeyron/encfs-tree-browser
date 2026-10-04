@@ -74,10 +74,13 @@ export function App() {
   const [agent, setAgent] = useState<AgentInfo | null>(null);
 
   const [view, setView] = useState<View>(() => (SUPPORTS_FSA ? 'browse' : 'convert'));
-  const [configs, setConfigs] = useState<EncfsConfiguration[]>(() => [
-    ...BUILTIN_CONFIGS,
-    ...loadConfigs(),
-  ]);
+  const [configs, setConfigs] = useState<EncfsConfiguration[]>(() => {
+    console.log(`[encfs-tree-browser] v${import.meta.env.VITE_APP_VERSION || 'dev'} loaded`);
+    return [
+      ...BUILTIN_CONFIGS,
+      ...loadConfigs(),
+    ];
+  });
   const [activeId, setActiveId] = useState<string>(() => loadActiveId() ?? '');
   const activeConfig = configs.find((c) => c.id === activeId) ?? null;
 
@@ -99,8 +102,6 @@ export function App() {
           setAgent(info);
           if (info) {
             console.log('[agent] detected', { base: info.base || '(same origin)', roots: info.roots });
-            // Switch to browse if we were stuck in convert mode
-            if (!SUPPORTS_FSA && view === 'convert') setView('browse');
           }
         }
       })
@@ -791,7 +792,7 @@ export function App() {
           >
             ⚡ Convert
           </button>
-          {(SUPPORTS_FSA || agent) && (
+          {SUPPORTS_FSA && (
             <button
               className={`app-tab${view === 'browse' ? ' app-tab-active' : ''}`}
               onClick={() => handleViewChange('browse')}
@@ -808,7 +809,7 @@ export function App() {
                   <span className="setup-error-icon">ℹ️</span>
                   <div className="setup-error-content">
                     <p className="setup-error-message">
-                      Browse mode requires either File System Access API or the local agent.
+                      Browse mode not available: requires File System Access API or local agent.
                       Use the <strong>⚡ Convert</strong> tab to decode file names.
                     </p>
                   </div>

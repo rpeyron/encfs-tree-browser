@@ -5,6 +5,10 @@ import { gzipSync } from 'node:zlib'
 import { defineConfig, type Plugin, type UserConfig } from 'vite'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 
+// Read version from package.json
+const pkg = JSON.parse(readFileSync(resolve('package.json'), 'utf8'))
+const version = pkg.version || 'dev'
+
 /**
  * Self-compressing standalone: replace the inlined JS/CSS with gzip+base64 payloads
  * inflated at boot via the native DecompressionStream (Chrome/Edge 80+, our target).
@@ -89,6 +93,9 @@ function finalizeStandalone(): Plugin {
 export default defineConfig(async ({ mode }) => {
   const standalone = mode === 'standalone'
   return {
+    define: {
+      'import.meta.env.VITE_APP_VERSION': JSON.stringify(version),
+    },
     plugins: [
       inlineFavicon(),
       (await prefresh()) as Plugin,
