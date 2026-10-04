@@ -71,6 +71,8 @@ function attachChildren(list: TreeNode[], id: string, children: TreeNode[]): Tre
 }
 
 export function App() {
+  const [agent, setAgent] = useState<AgentInfo | null>(null);
+
   const [view, setView] = useState<View>(() => (SUPPORTS_FSA ? 'browse' : 'convert'));
   const [configs, setConfigs] = useState<EncfsConfiguration[]>(() => [
     ...BUILTIN_CONFIGS,
@@ -87,7 +89,6 @@ export function App() {
   const [codec, setCodec] = useState<EncfsNameCodec | null>(null);
   const codecKeyRef = useRef('');
   const fsaHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
-  const [agent, setAgent] = useState<AgentInfo | null>(null);
 
   // Probe the local agent (same origin when served by it, else 8765-8785).
   useEffect(() => {
@@ -96,7 +97,11 @@ export function App() {
       .then((info) => {
         if (alive) {
           setAgent(info);
-          if (info) console.log('[agent] detected', { base: info.base || '(same origin)', roots: info.roots });
+          if (info) {
+            console.log('[agent] detected', { base: info.base || '(same origin)', roots: info.roots });
+            // Switch to browse if we were stuck in convert mode
+            if (!SUPPORTS_FSA && view === 'convert') setView('browse');
+          }
         }
       })
       .catch((err) => {
@@ -108,7 +113,7 @@ export function App() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [view]);
 
   const [nodes, setNodes] = useState<TreeNode[]>([]);
   const nodesRef = useRef<TreeNode[]>(nodes);
@@ -786,7 +791,7 @@ export function App() {
           >
             ⚡ Convert
           </button>
-          {SUPPORTS_FSA && (
+          {(SUPPORTS_FSA || agent) && (
             <button
               className={`app-tab${view === 'browse' ? ' app-tab-active' : ''}`}
               onClick={() => handleViewChange('browse')}
@@ -860,8 +865,18 @@ export function App() {
                   <p>No tree loaded yet</p>
                   <ol className="tree-grid-empty-steps">
                     <li>Select a <strong>configuration</strong> (top left)</li>
-                    <li>Choose a <strong>directory</strong>, then <strong>🔍 Scan</strong></li>
-                    <li>Or convert a list of names in the <strong>⚡ Convert</strong> tab</li>
+                    <li>
+                      {agent ? (
+                        <>Browse directories via the <strong>local agent</strong>, then <strong>🔍 Scan</strong></>
+                      ) : SUPPORTS_FSA ? (
+                        <>Pick a <strong>directory</strong> (File System Access), then <strong>🔍 Scan</strong></>
+                      ) : (
+                        <>Use the <strong>⚡ Convert</strong> tab to decode file names</>
+                      )}
+                    </li>
+                    {(agent || SUPPORTS_FSA) && (
+                      <li>Or convert a list of names in the <strong>⚡ Convert</strong> tab</li>
+                    )}
                   </ol>
                 </div>
               </div>

@@ -40,10 +40,12 @@ async function tryProbe(base: string): Promise<AgentInfo | null> {
   }
 }
 
+let failedProbe = false;
 let cachedProbe: Promise<AgentInfo | null> | null = null;
 
 /** Reset probe cache (for tests only) */
 export function resetProbeCache() {
+  failedProbe = false;
   cachedProbe = null;
 }
 
@@ -52,12 +54,19 @@ export function resetProbeCache() {
  * - file:// → never probe (no silent relative fetch possible, noise-free by default)
  * - localhost http (agent same-origin or vite) → relative endpoint first
  * - always try 8765 once; the full port range is only scanned in dev
- * - cached: subsequent calls return the same promise (probe once per page load)
+ * - cached: only failures are cached (success allows agent restart detection)
  */
 export async function probeAgent(): Promise<AgentInfo | null> {
+  // If we already failed once, don't probe again (avoid console spam)
+  if (failedProbe) return null;
+
+  // Return in-flight probe if one is running
   if (cachedProbe) return cachedProbe;
 
-  if (typeof location !== 'undefined' && location.protocol === 'file:') return null;
+  if (typeof location !== 'undefined' && location.protocol === 'file:') {
+    failedProbe = true;
+    return null;
+  }
 
   cachedProbe = (async () => {
     const bases: string[] = [];
@@ -72,10 +81,15 @@ export async function probeAgent(): Promise<AgentInfo | null> {
       const info = await tryProbe(base);
       if (info) return info;
     }
+    failedProbe = true;
     return null;
   })();
 
-  return cachedProbe;
+  try {
+    return await cachedProbe;
+  } finally {
+    cachedProbe = null;
+  }
 }
 
 interface RawEntry {
